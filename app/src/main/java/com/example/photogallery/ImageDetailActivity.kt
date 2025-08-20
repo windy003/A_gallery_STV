@@ -1,8 +1,8 @@
 package com.example.photogallery
 
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import com.bumptech.glide.Glide
 
 class ImageDetailActivity : AppCompatActivity() {
     
@@ -14,9 +14,11 @@ class ImageDetailActivity : AppCompatActivity() {
         val zoomableImageView = findViewById<ZoomableImageView>(R.id.zoomableImageView)
         
         imagePath?.let {
-            Glide.with(this)
-                .load(it)
-                .into(zoomableImageView)
+            // 直接使用BitmapFactory加载图片，避免Glide的开销
+            val bitmap = BitmapFactory.decodeFile(it)
+            bitmap?.let { bmp ->
+                zoomableImageView.setImageBitmap(bmp)
+            }
         }
     }
 }

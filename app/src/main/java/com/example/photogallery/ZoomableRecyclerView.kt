@@ -75,7 +75,8 @@ class ZoomableRecyclerView @JvmOverloads constructor(
             // 只有当列数确实需要改变时才更新布局，避免频繁刷新
             if (newColumns != currentColumns) {
                 currentColumns = newColumns
-                post { updateGridLayout() } // 使用post确保在主线程中执行
+                // 移除post调用，直接在当前线程执行
+                updateGridLayout()
             }
             
             return true
@@ -93,9 +94,10 @@ class ZoomableRecyclerView @JvmOverloads constructor(
     
     private fun updateGridLayout() {
         val gridLayoutManager = layoutManager as? GridLayoutManager
-        gridLayoutManager?.spanCount = currentColumns
-        
-        // 通知适配器数据可能发生变化（主要是为了重新计算item大小）
-        photoAdapter?.notifyDataSetChanged()
+        if (gridLayoutManager?.spanCount != currentColumns) {
+            gridLayoutManager?.spanCount = currentColumns
+            // 只在列数真正改变时才重新布局，避免不必要的重绘
+            requestLayout()
+        }
     }
 }

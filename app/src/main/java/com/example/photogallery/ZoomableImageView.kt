@@ -31,6 +31,9 @@ class ZoomableImageView @JvmOverloads constructor(
     private var viewHeight = 0
     private var oldMeasuredWidth = 0
     private var oldMeasuredHeight = 0
+    
+    // 性能优化：重用数组避免频繁创建
+    private val matrixValues = FloatArray(9)
 
     private lateinit var scaleDetector: ScaleGestureDetector
 
@@ -51,10 +54,10 @@ class ZoomableImageView @JvmOverloads constructor(
             scaleDetector.onTouchEvent(event)
             val curr = PointF(event.x, event.y)
 
-            when (event.action) {
+            when (event.action and MotionEvent.ACTION_MASK) {
                 MotionEvent.ACTION_DOWN -> {
                     savedMatrix.set(matrix)
-                    start.set(event.x, event.y)
+                    start.set(curr)
                     mode = DRAG
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
@@ -71,11 +74,11 @@ class ZoomableImageView @JvmOverloads constructor(
                         val dx = curr.x - start.x
                         val dy = curr.y - start.y
                         matrix.postTranslate(dx, dy)
-                        fixTranslation()
-                        imageMatrix = matrix
                     }
                 }
             }
+            imageMatrix = matrix
+            fixTranslation()
             true
         }
     }
@@ -105,22 +108,21 @@ class ZoomableImageView @JvmOverloads constructor(
                 scaleFactor = minScale / origScale
             }
 
-            if (originalWidth * saveScale <= viewWidth || originalHeight * saveScale <= viewHeight) {
-                matrix.postScale(scaleFactor, scaleFactor, viewWidth / 2f, viewHeight / 2f)
-            } else {
-                matrix.postScale(scaleFactor, scaleFactor, detector.focusX, detector.focusY)
-            }
-
+            // 性能优化：减少条件判断的复杂度
+            val focusX = if (originalWidth * saveScale <= viewWidth) viewWidth / 2f else detector.focusX
+            val focusY = if (originalHeight * saveScale <= viewHeight) viewHeight / 2f else detector.focusY
+            
+            matrix.postScale(scaleFactor, scaleFactor, focusX, focusY)
             fixTranslation()
             return true
         }
     }
 
     private fun fixTranslation() {
-        val values = FloatArray(9)
-        matrix.getValues(values)
-        val transX = values[Matrix.MTRANS_X]
-        val transY = values[Matrix.MTRANS_Y]
+        // 重用数组避免频繁创建对象
+        matrix.getValues(matrixValues)
+        val transX = matrixValues[Matrix.MTRANS_X]
+        val transY = matrixValues[Matrix.MTRANS_Y]
 
         val fixTransX = getFixTranslation(transX, viewWidth.toFloat(), originalWidth * saveScale)
         val fixTransY = getFixTranslation(transY, viewHeight.toFloat(), originalHeight * saveScale)
