@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.example.photogallery.app-mergeDebugResources-36:/layout/item_photo.xml",
+        "source": "com.example.photogallery.app-main-39:/layout/item_photo.xml"
+    },
+    {
+        "merged": "com.example.photogallery.app-mergeDebugResources-36:/layout/activity_image_detail.xml",
+        "source": "com.example.photogallery.app-main-39:/layout/activity_image_detail.xml"
+    },
+    {
+        "merged": "com.example.photogallery.app-mergeDebugResources-36:/layout/activity_main.xml",
+        "source": "com.example.photogallery.app-main-39:/layout/activity_main.xml"
+    }
+]

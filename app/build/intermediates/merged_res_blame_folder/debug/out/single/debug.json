@@ -1,0 +1,26 @@
+[
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-merged_res-37:\\layout_activity_image_detail.xml.flat",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-main-39:\\layout\\activity_image_detail.xml"
+    },
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-merged_res-37:\\xml_data_extraction_rules.xml.flat",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-main-39:\\xml\\data_extraction_rules.xml"
+    },
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-merged_res-37:\\layout_activity_main.xml.flat",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-main-39:\\layout\\activity_main.xml"
+    },
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-merged_res-37:\\xml_backup_rules.xml.flat",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-main-39:\\xml\\backup_rules.xml"
+    },
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-merged_res-37:\\layout_item_photo.xml.flat",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.0\\com.example.photogallery.app-main-39:\\layout\\item_photo.xml"
+    },
+    {
+        "merged": "com.example.photogallery.app-merged_res-37:/drawable_ic_launcher.xml.flat",
+        "source": "com.example.photogallery.app-main-39:/drawable/ic_launcher.xml"
+    }
+]
