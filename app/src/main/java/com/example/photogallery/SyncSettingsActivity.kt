@@ -311,13 +311,25 @@ class SyncSettingsActivity : AppCompatActivity() {
             result.different.forEach { diff ->
                 message.append("  📂 ${diff.name}:\n")
                 if (diff.onlyInLocal.isNotEmpty()) {
-                    message.append("    📱 Local only: ${diff.onlyInLocal.size} items\n")
+                    message.append("    📱 Only on Local (${diff.onlyInLocal.size}):\n")
+                    diff.onlyInLocal.take(10).forEach { fileName ->
+                        message.append("      • $fileName\n")
+                    }
+                    if (diff.onlyInLocal.size > 10) {
+                        message.append("      ... and ${diff.onlyInLocal.size - 10} more\n")
+                    }
                 }
                 if (diff.onlyInRemote.isNotEmpty()) {
-                    message.append("    ☁️ VPS only: ${diff.onlyInRemote.size} items\n")
+                    message.append("    ☁️ Only on VPS (${diff.onlyInRemote.size}):\n")
+                    diff.onlyInRemote.take(10).forEach { fileName ->
+                        message.append("      • $fileName\n")
+                    }
+                    if (diff.onlyInRemote.size > 10) {
+                        message.append("      ... and ${diff.onlyInRemote.size - 10} more\n")
+                    }
                 }
+                message.append("\n")
             }
-            message.append("\n")
         }
         
         // Identical collections
@@ -336,6 +348,107 @@ class SyncSettingsActivity : AppCompatActivity() {
             .setTitle("Collection Comparison Results")
             .setMessage(message.toString())
             .setPositiveButton("OK", null)
+            .setNeutralButton("详细差异") { _, _ ->
+                showDetailedDifferencesDialog(result)
+            }
+            .show()
+    }
+
+    private fun showDetailedDifferencesDialog(result: ComparisonResult) {
+        // 创建分类数据
+        val categories = mutableListOf<String>()
+        val categoryData = mutableMapOf<String, List<String>>()
+        
+        // 只在本地的收藏
+        if (result.onlyLocal.isNotEmpty()) {
+            categories.add("📱 只在本地的收藏 (${result.onlyLocal.size})")
+            categoryData["📱 只在本地的收藏 (${result.onlyLocal.size})"] = result.onlyLocal
+        }
+        
+        // 只在VPS的收藏
+        if (result.onlyRemote.isNotEmpty()) {
+            categories.add("☁️ 只在VPS的收藏 (${result.onlyRemote.size})")
+            categoryData["☁️ 只在VPS的收藏 (${result.onlyRemote.size})"] = result.onlyRemote
+        }
+        
+        // 有差异的收藏中的文件
+        result.different.forEach { diff ->
+            if (diff.onlyInLocal.isNotEmpty()) {
+                val key = "📱 ${diff.name} - 只在本地 (${diff.onlyInLocal.size})"
+                categories.add(key)
+                categoryData[key] = diff.onlyInLocal
+            }
+            if (diff.onlyInRemote.isNotEmpty()) {
+                val key = "☁️ ${diff.name} - 只在VPS (${diff.onlyInRemote.size})"
+                categories.add(key)
+                categoryData[key] = diff.onlyInRemote
+            }
+        }
+        
+        // 相同的收藏
+        if (result.identical.isNotEmpty()) {
+            categories.add("✅ 完全相同的收藏 (${result.identical.size})")
+            categoryData["✅ 完全相同的收藏 (${result.identical.size})"] = result.identical
+        }
+        
+        if (categories.isEmpty()) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("详细差异")
+                .setMessage("没有找到任何差异。")
+                .setPositiveButton("确定", null)
+                .show()
+            return
+        }
+        
+        // 显示分类选择对话框
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("选择要查看的类别")
+            .setItems(categories.toTypedArray()) { _, which ->
+                val selectedCategory = categories[which]
+                val items = categoryData[selectedCategory] ?: emptyList()
+                showFileListDialog(selectedCategory, items)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+    
+    private fun showFileListDialog(title: String, items: List<String>) {
+        if (items.isEmpty()) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage("没有项目可显示。")
+                .setPositiveButton("确定", null)
+                .show()
+            return
+        }
+        
+        // 使用现有的文件列表对话框布局
+        val dialogView = layoutInflater.inflate(R.layout.dialog_file_list, null)
+        val recyclerView = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerViewFileList)
+        val titleTextView = dialogView.findViewById<android.widget.TextView>(R.id.tvTitle)
+        
+        titleTextView.text = title
+        
+        // 创建文件列表项（假设都是图片，因为我们只有文件名）
+        val fileList = items.map { fileName ->
+            FileListItem(
+                fileName = fileName,
+                filePath = "", // 同步比对时我们只有文件名
+                isVideo = fileName.lowercase().let { 
+                    it.endsWith(".mp4") || it.endsWith(".avi") || it.endsWith(".mov") || 
+                    it.endsWith(".mkv") || it.endsWith(".wmv") || it.endsWith(".flv") 
+                }
+            )
+        }
+        
+        // 设置RecyclerView（不添加点击事件，仅显示）
+        recyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        recyclerView.adapter = FileListAdapter(fileList)
+        
+        // 显示对话框
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setPositiveButton("确定", null)
             .show()
     }
 
