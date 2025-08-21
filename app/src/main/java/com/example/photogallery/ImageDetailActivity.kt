@@ -65,7 +65,7 @@ class ImageDetailActivity : AppCompatActivity() {
                         }
                     }
                     .setPositiveButton("OK") { _, _ ->
-                        viewModel.updateImageInCollections(path, selectedCollectionIds)
+                        viewModel.updateImageInCollections(listOf(path), selectedCollectionIds)
                     }
                     .setNegativeButton("Cancel", null)
                     .show()

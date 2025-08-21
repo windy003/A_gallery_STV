@@ -6,14 +6,21 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import com.example.photogallery.data.AppDatabase
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 // Data class to hold media items
 data class MediaItem(val path: String, val isVideo: Boolean, val dateAdded: Long, val duration: Long = 0)
@@ -22,6 +29,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: ZoomableRecyclerView
     private lateinit var photoAdapter: PhotoAdapter
+    private var actionMode: ActionMode? = null
+
+    private lateinit var viewModel: ImageDetailViewModel
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -35,6 +45,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        val factory = ImageDetailViewModelFactory(AppDatabase.getDatabase(application).collectionDao())
+        viewModel = ViewModelProvider(this, factory).get(ImageDetailViewModel::class.java)
 
         val toolbar: Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -62,25 +75,106 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = GridLayoutManager(this, 3)
 
-        photoAdapter = PhotoAdapter { mediaItem ->
-            if (mediaItem.isVideo) {
-                val intent = Intent(this, VideoPlayerActivity::class.java)
-                intent.putExtra("video_path", mediaItem.path)
-                startActivity(intent)
-            } else {
-                val intent = Intent(this, ImageDetailActivity::class.java)
-                intent.putExtra("image_path", mediaItem.path)
-                startActivity(intent)
+        photoAdapter = PhotoAdapter(
+            onItemClick = { mediaItem ->
+                if (actionMode != null) {
+                    toggleSelection(mediaItem)
+                } else {
+                    if (mediaItem.isVideo) {
+                        val intent = Intent(this, VideoPlayerActivity::class.java)
+                        intent.putExtra("video_path", mediaItem.path)
+                        startActivity(intent)
+                    } else {
+                        val intent = Intent(this, ImageDetailActivity::class.java)
+                        intent.putExtra("image_path", mediaItem.path)
+                        startActivity(intent)
+                    }
+                }
+            },
+            onItemLongClick = { mediaItem ->
+                if (actionMode == null) {
+                    actionMode = startActionMode(actionModeCallback)
+                }
+                toggleSelection(mediaItem)
+            }
+        )
+        recyclerView.setPhotoAdapter(photoAdapter)
+    }
+
+    private fun toggleSelection(mediaItem: MediaItem) {
+        if (photoAdapter.getSelectedItems().contains(mediaItem)) {
+            photoAdapter.deselectItem(mediaItem)
+        } else {
+            photoAdapter.selectItem(mediaItem)
+        }
+        val selectedCount = photoAdapter.getSelectedItems().size
+        if (selectedCount == 0) {
+            actionMode?.finish()
+        } else {
+            actionMode?.title = "$selectedCount selected"
+        }
+    }
+
+    private val actionModeCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+            mode?.menuInflater?.inflate(R.menu.contextual_action_bar_menu, menu)
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+            return false
+        }
+
+        override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+            return when (item?.itemId) {
+                R.id.action_add_to_collection_cab -> {
+                    showCollectionsDialogForSelectedItems()
+                    mode?.finish()
+                    true
+                }
+                else -> false
             }
         }
-        recyclerView.setPhotoAdapter(photoAdapter)
+
+        override fun onDestroyActionMode(mode: ActionMode?) {
+            photoAdapter.selectionMode = false
+            actionMode = null
+        }
+    }
+
+    private fun showCollectionsDialogForSelectedItems() {
+        val selectedPaths = photoAdapter.getSelectedItems().map { it.path }.toList()
+        if (selectedPaths.isEmpty()) return
+
+        lifecycleScope.launch {
+            val allCollections = viewModel.getAllCollections().first()
+
+            val collectionNames = allCollections.map { it.name }.toTypedArray()
+            val checkedItems = BooleanArray(allCollections.size) { false }
+            val selectedCollectionIds = mutableListOf<Long>()
+
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("Add selected to Collection")
+                .setMultiChoiceItems(collectionNames, checkedItems) { _, which, isChecked ->
+                    val collectionId = allCollections[which].id
+                    if (isChecked) {
+                        selectedCollectionIds.add(collectionId)
+                    } else {
+                        selectedCollectionIds.remove(collectionId)
+                    }
+                }
+                .setPositiveButton("OK") { _, _ ->
+                    viewModel.updateImageInCollections(selectedPaths, selectedCollectionIds)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     private fun checkPermissionAndLoadMedia() {
         val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
         } else {
-            // For older versions, READ_EXTERNAL_STORAGE covers both
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 

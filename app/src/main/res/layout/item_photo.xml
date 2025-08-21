@@ -42,6 +42,13 @@
             android:visibility="gone"
             tools:text="01:23" />
 
+        <View
+            android:id="@+id/selectionOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#800080FF"
+            android:visibility="gone" />
+
     </FrameLayout>
 
 </androidx.cardview.widget.CardView>

@@ -18,21 +18,23 @@ class ImageDetailViewModel(private val dao: CollectionDao) : ViewModel() {
         return dao.getCollectionsForItem(imagePath)
     }
 
-    fun updateImageInCollections(imagePath: String, selectedCollectionIds: List<Long>) = viewModelScope.launch {
-        val currentCollections = getCollectionsForImage(imagePath).first()
-        val currentCollectionIds = currentCollections.map { it.collectionId }
+    fun updateImageInCollections(mediaPaths: List<String>, selectedCollectionIds: List<Long>) = viewModelScope.launch {
+        mediaPaths.forEach { mediaPath ->
+            val currentCollections = getCollectionsForImage(mediaPath).first()
+            val currentCollectionIds = currentCollections.map { it.collectionId }
 
-        // Add to new collections
-        selectedCollectionIds.forEach { collectionId ->
-            if (!currentCollectionIds.contains(collectionId)) {
-                dao.insertItemIntoCollection(CollectionItem(collectionId = collectionId, mediaPath = imagePath))
+            // Add to new collections
+            selectedCollectionIds.forEach { collectionId ->
+                if (!currentCollectionIds.contains(collectionId)) {
+                    dao.insertItemIntoCollection(CollectionItem(collectionId = collectionId, mediaPath = mediaPath))
+                }
             }
-        }
 
-        // Remove from deselected collections
-        currentCollectionIds.forEach { collectionId ->
-            if (!selectedCollectionIds.contains(collectionId)) {
-                dao.removeItemFromCollection(collectionId, imagePath)
+            // Remove from deselected collections
+            currentCollectionIds.forEach { collectionId ->
+                if (!selectedCollectionIds.contains(collectionId)) {
+                    dao.removeItemFromCollection(collectionId, mediaPath)
+                }
             }
         }
     }

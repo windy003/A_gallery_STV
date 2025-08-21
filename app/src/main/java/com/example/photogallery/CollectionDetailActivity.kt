@@ -37,18 +37,23 @@ class CollectionDetailActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = collectionName
 
-        val photoAdapter = PhotoAdapter { mediaItem ->
-            val intent = if (mediaItem.isVideo) {
-                Intent(this, VideoPlayerActivity::class.java).apply {
-                    putExtra("video_path", mediaItem.path)
+        val photoAdapter = PhotoAdapter(
+            onItemClick = { mediaItem ->
+                val intent = if (mediaItem.isVideo) {
+                    Intent(this, VideoPlayerActivity::class.java).apply {
+                        putExtra("video_path", mediaItem.path)
+                    }
+                } else {
+                    Intent(this, ImageDetailActivity::class.java).apply {
+                        putExtra("image_path", mediaItem.path)
+                    }
                 }
-            } else {
-                Intent(this, ImageDetailActivity::class.java).apply {
-                    putExtra("image_path", mediaItem.path)
-                }
+                startActivity(intent)
+            },
+            onItemLongClick = { mediaItem ->
+                // Handle long click if needed
             }
-            startActivity(intent)
-        }
+        )
 
         binding.recyclerView.adapter = photoAdapter
         binding.recyclerView.layoutManager = GridLayoutManager(this, 3)

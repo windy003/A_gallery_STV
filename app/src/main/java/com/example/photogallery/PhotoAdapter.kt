@@ -11,8 +11,19 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 
 class PhotoAdapter(
-    private val onItemClick: (MediaItem) -> Unit
+    private val onItemClick: (MediaItem) -> Unit,
+    private val onItemLongClick: (MediaItem) -> Unit
 ) : ListAdapter<MediaItem, PhotoAdapter.PhotoViewHolder>(MediaItemDiffCallback()) {
+
+    private val selectedItems = mutableSetOf<MediaItem>()
+    var selectionMode: Boolean = false
+        set(value) {
+            field = value
+            if (!value) {
+                selectedItems.clear()
+            }
+            notifyDataSetChanged() // Notify all items to update their selection state
+        }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PhotoViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_photo, parent, false)
@@ -21,15 +32,33 @@ class PhotoAdapter(
 
     override fun onBindViewHolder(holder: PhotoViewHolder, position: Int) {
         val mediaItem = getItem(position)
-        holder.bind(mediaItem, onItemClick)
+        holder.bind(mediaItem, onItemClick, onItemLongClick, selectedItems.contains(mediaItem), selectionMode)
     }
+
+    fun selectItem(mediaItem: MediaItem) {
+        selectedItems.add(mediaItem)
+        notifyItemChanged(currentList.indexOf(mediaItem))
+    }
+
+    fun deselectItem(mediaItem: MediaItem) {
+        selectedItems.remove(mediaItem)
+        notifyItemChanged(currentList.indexOf(mediaItem))
+    }
+
+    fun clearSelection() {
+        selectedItems.clear()
+        notifyDataSetChanged()
+    }
+
+    fun getSelectedItems(): Set<MediaItem> = selectedItems
 
     class PhotoViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val imageView: ImageView = itemView.findViewById(R.id.imageView)
         private val playIcon: ImageView = itemView.findViewById(R.id.playIcon)
         private val durationTextView: TextView = itemView.findViewById(R.id.durationTextView)
+        private val selectionOverlay: View = itemView.findViewById(R.id.selectionOverlay) // Assuming this is added to item_photo.xml
 
-        fun bind(mediaItem: MediaItem, onItemClick: (MediaItem) -> Unit) {
+        fun bind(mediaItem: MediaItem, onItemClick: (MediaItem) -> Unit, onItemLongClick: (MediaItem) -> Unit, isSelected: Boolean, selectionMode: Boolean) {
             Glide.with(itemView.context)
                 .load(mediaItem.path)
                 .centerCrop()
@@ -45,8 +74,24 @@ class PhotoAdapter(
             }
 
             itemView.setOnClickListener {
-                onItemClick(mediaItem)
+                if (selectionMode) {
+                    // Toggle selection
+                    if (isSelected) {
+                        // This logic will be handled by MainActivity
+                    } else {
+                        // This logic will be handled by MainActivity
+                    }
+                } else {
+                    onItemClick(mediaItem)
+                }
             }
+
+            itemView.setOnLongClickListener {
+                onItemLongClick(mediaItem)
+                true
+            }
+
+            selectionOverlay.visibility = if (isSelected) View.VISIBLE else View.GONE
         }
 
         private fun formatDuration(milliseconds: Long): String {
