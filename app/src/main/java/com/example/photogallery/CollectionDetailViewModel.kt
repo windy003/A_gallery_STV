@@ -51,6 +51,10 @@ class CollectionDetailViewModel(application: Application, private val dao: Colle
             dao.removeItemFromCollection(collectionId, mediaPath)
         }
     }
+
+    fun updateImagePath(oldPath: String, newPath: String) = viewModelScope.launch {
+        dao.updateItemPath(oldPath, newPath)
+    }
 }
 
 class CollectionDetailViewModelFactory(private val application: Application, private val dao: CollectionDao, private val collectionId: Long) : ViewModelProvider.Factory {

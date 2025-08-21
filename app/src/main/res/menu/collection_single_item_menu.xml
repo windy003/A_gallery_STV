@@ -4,14 +4,20 @@
     
     <item
         android:id="@+id/action_edit_filename"
-        android:title="编辑文件名"
         android:icon="@android:drawable/ic_menu_edit"
+        android:title="编辑文件名"
         app:showAsAction="ifRoom" />
         
     <item
         android:id="@+id/action_view_info"
-        android:title="查看信息"
         android:icon="@android:drawable/ic_menu_info_details"
+        android:title="查看信息"
+        app:showAsAction="ifRoom" />
+        
+    <item
+        android:id="@+id/action_remove_from_collection"
+        android:icon="@android:drawable/ic_menu_delete"
+        android:title="从收藏中移除"
         app:showAsAction="ifRoom" />
         
 </menu>

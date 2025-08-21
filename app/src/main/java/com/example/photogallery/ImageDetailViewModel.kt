@@ -38,6 +38,10 @@ class ImageDetailViewModel(private val dao: CollectionDao) : ViewModel() {
             }
         }
     }
+
+    fun updateImagePath(oldPath: String, newPath: String) = viewModelScope.launch {
+        dao.updateItemPath(oldPath, newPath)
+    }
 }
 
 class ImageDetailViewModelFactory(private val dao: CollectionDao) : ViewModelProvider.Factory {

@@ -42,4 +42,7 @@ interface CollectionDao {
 
     @Query("DELETE FROM collection_items")
     suspend fun deleteAllCollectionItems()
+
+    @Query("UPDATE collection_items SET mediaPath = :newPath WHERE mediaPath = :oldPath")
+    suspend fun updateItemPath(oldPath: String, newPath: String)
 }
