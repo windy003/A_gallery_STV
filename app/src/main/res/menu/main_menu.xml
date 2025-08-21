@@ -6,4 +6,10 @@
         android:title="Collections"
         android:icon="@drawable/ic_collections"
         app:showAsAction="ifRoom" />
+    
+    <item
+        android:id="@+id/action_sync"
+        android:title="Sync Settings"
+        android:icon="@android:drawable/ic_menu_rotate"
+        app:showAsAction="never" />
 </menu>

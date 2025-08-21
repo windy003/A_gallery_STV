@@ -67,6 +67,10 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, CollectionsActivity::class.java))
                 true
             }
+            R.id.action_sync -> {
+                startActivity(Intent(this, SyncSettingsActivity::class.java))
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -165,6 +169,15 @@ class MainActivity : AppCompatActivity() {
                 }
                 .setPositiveButton("OK") { _, _ ->
                     viewModel.updateImageInCollections(selectedPaths, selectedCollectionIds)
+                    
+                    // Log the change
+                    if (selectedCollectionIds.isNotEmpty()) {
+                        lifecycleScope.launch {
+                            val collections = viewModel.getAllCollections().first()
+                            val selectedCollectionNames = collections.filter { selectedCollectionIds.contains(it.id) }.map { it.name }
+                            ChangeLogHelper.getInstance(this@MainActivity).logMultipleItemsAddedToCollections(selectedPaths, selectedCollectionNames)
+                        }
+                    }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()

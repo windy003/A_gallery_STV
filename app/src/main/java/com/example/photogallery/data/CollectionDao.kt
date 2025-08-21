@@ -29,4 +29,17 @@ interface CollectionDao {
 
     @Query("SELECT * FROM collection_items WHERE mediaPath = :mediaPath")
     fun getCollectionsForItem(mediaPath: String): Flow<List<CollectionItem>>
+
+    // Sync methods - non-Flow versions for background operations
+    @Query("SELECT * FROM collections ORDER BY name ASC")
+    suspend fun getAllCollectionsSync(): List<Collection>
+
+    @Query("SELECT * FROM collection_items WHERE collectionId = :collectionId")
+    suspend fun getItemsForCollectionSync(collectionId: Long): List<CollectionItem>
+
+    @Query("DELETE FROM collections")
+    suspend fun deleteAllCollections()
+
+    @Query("DELETE FROM collection_items")
+    suspend fun deleteAllCollectionItems()
 }
