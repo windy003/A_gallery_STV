@@ -83,6 +83,10 @@ class SyncService(private val context: Context) {
                 createRemoteDirectory(channel, config.remotePath)
             }
 
+            // First, get existing remote collections for comparison
+            val existingRemoteCollections = getRemoteCollections(channel, config.remotePath)
+            val localCollectionNames = collections.map { sanitizeFileName(it.name) }.toSet()
+            
             // Upload each collection as a folder
             for (collection in collections) {
                 val collectionPath = "${config.remotePath}/${sanitizeFileName(collection.name)}"
@@ -97,7 +101,14 @@ class SyncService(private val context: Context) {
                 // Get items for this collection
                 val items = collectionDao.getItemsForCollectionSync(collection.id)
                 totalFiles += items.size
+                val localFileNames = items.mapNotNull { item ->
+                    val file = File(item.mediaPath)
+                    if (file.exists()) file.name else null
+                }.toSet()
 
+                // Get existing files in this remote collection
+                val existingRemoteFiles = getRemoteFilesInCollection(channel, collectionPath)
+                
                 // Upload each image/video file
                 for (item in items) {
                     try {
@@ -129,14 +140,36 @@ class SyncService(private val context: Context) {
                         e.printStackTrace()
                     }
                 }
+                
+                // Delete files that exist remotely but not locally (mirror sync)
+                for (remoteFileName in existingRemoteFiles) {
+                    if (!localFileNames.contains(remoteFileName)) {
+                        try {
+                            channel.rm("$collectionPath/$remoteFileName")
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            }
+            
+            // Delete remote collections that don't exist locally (mirror sync)
+            for (remoteCollectionName in existingRemoteCollections) {
+                if (!localCollectionNames.contains(remoteCollectionName)) {
+                    try {
+                        deleteRemoteDirectory(channel, "${config.remotePath}/$remoteCollectionName")
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
 
             // Record upload change log
             changeLogDao.insertChangeLog(
                 com.example.photogallery.data.ChangeLog(
                     timestamp = System.currentTimeMillis(),
-                    action = "UPLOAD",
-                    description = "Uploaded ${collections.size} collections ($uploadedFiles/$totalFiles files) to VPS"
+                    action = "MIRROR_SYNC",
+                    description = "Mirror synced ${collections.size} collections ($uploadedFiles/$totalFiles files) to VPS. Remote files/folders deleted when removed locally."
                 )
             )
 
@@ -173,22 +206,59 @@ class SyncService(private val context: Context) {
                 downloadDir.mkdirs()
             }
 
+            // Get existing local collections for comparison
+            val existingLocalCollections = collectionDao.getAllCollectionsSync()
+            val existingLocalCollectionMap = existingLocalCollections.associateBy { it.name }
+
             // List all directories in the remote path (each represents a collection)
             val remoteDirs = (channel.ls(config.remotePath) as Vector<ChannelSftp.LsEntry>).filter { 
                 it.attrs.isDir && !it.filename.startsWith(".")
             }
+            val remoteCollectionNames = remoteDirs.map { it.filename }.toSet()
 
-            // Clear existing collections (optional - you might want to merge instead)
-            collectionDao.deleteAllCollections()
+            // Delete local collections that don't exist on VPS (mirror sync)
+            for (localCollection in existingLocalCollections) {
+                if (!remoteCollectionNames.contains(localCollection.name)) {
+                    // Delete all items in this collection first
+                    val items = collectionDao.getItemsForCollectionSync(localCollection.id)
+                    for (item in items) {
+                        try {
+                            val file = File(item.mediaPath)
+                            if (file.exists()) {
+                                file.delete()
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                    // Delete the collection from database
+                    collectionDao.deleteCollection(localCollection)
+                    
+                    // Delete local directory if it exists
+                    try {
+                        val localCollectionDir = File(downloadDir, localCollection.name)
+                        if (localCollectionDir.exists()) {
+                            localCollectionDir.deleteRecursively()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
 
             for (remoteDir in remoteDirs) {
                 totalCollections++
                 val collectionName = remoteDir.filename
                 val remoteDirPath = "${config.remotePath}/$collectionName"
                 
-                // Create collection in database
-                val collection = Collection(id = 0, name = collectionName)
-                val collectionId = collectionDao.insertCollection(collection)
+                // Get or create collection in database
+                val existingCollection = existingLocalCollectionMap[collectionName]
+                val collectionId = if (existingCollection != null) {
+                    existingCollection.id
+                } else {
+                    val collection = Collection(id = 0, name = collectionName)
+                    collectionDao.insertCollection(collection)
+                }
                 
                 // Create local directory for this collection
                 val localCollectionDir = File(downloadDir, collectionName)
@@ -196,10 +266,33 @@ class SyncService(private val context: Context) {
                     localCollectionDir.mkdirs()
                 }
 
+                // Get existing local files in this collection
+                val existingLocalItems = collectionDao.getItemsForCollectionSync(collectionId)
+                val existingLocalFileNames = existingLocalItems.map { File(it.mediaPath).name }.toSet()
+
                 // List and download all files in this collection directory
                 try {
                     val remoteFiles = (channel.ls(remoteDirPath) as Vector<ChannelSftp.LsEntry>).filter { 
                         !it.attrs.isDir && isImageOrVideo(it.filename)
+                    }
+                    val remoteFileNames = remoteFiles.map { it.filename }.toSet()
+
+                    // Delete local files that don't exist on VPS (mirror sync)
+                    for (localItem in existingLocalItems) {
+                        val localFileName = File(localItem.mediaPath).name
+                        if (!remoteFileNames.contains(localFileName)) {
+                            try {
+                                // Delete the file from filesystem
+                                val file = File(localItem.mediaPath)
+                                if (file.exists()) {
+                                    file.delete()
+                                }
+                                // Remove from database
+                                collectionDao.removeItemFromCollection(localItem.collectionId, localItem.mediaPath)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
                     }
 
                     for (remoteFile in remoteFiles) {
@@ -223,12 +316,14 @@ class SyncService(private val context: Context) {
                                 downloadedFiles++
                             }
 
-                            // Add file to collection in database
-                            val collectionItem = CollectionItem(
-                                collectionId = collectionId,
-                                mediaPath = localFilePath.absolutePath
-                            )
-                            collectionDao.insertItemIntoCollection(collectionItem)
+                            // Add file to collection in database if not already exists
+                            if (!existingLocalFileNames.contains(fileName)) {
+                                val collectionItem = CollectionItem(
+                                    collectionId = collectionId,
+                                    mediaPath = localFilePath.absolutePath
+                                )
+                                collectionDao.insertItemIntoCollection(collectionItem)
+                            }
 
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -243,8 +338,8 @@ class SyncService(private val context: Context) {
             changeLogDao.insertChangeLog(
                 com.example.photogallery.data.ChangeLog(
                     timestamp = System.currentTimeMillis(),
-                    action = "DOWNLOAD",
-                    description = "Downloaded $totalCollections collections ($downloadedFiles files) from VPS"
+                    action = "MIRROR_SYNC",
+                    description = "Mirror synced $totalCollections collections ($downloadedFiles files) from VPS. Local files/folders deleted when removed from VPS."
                 )
             )
 
@@ -457,6 +552,51 @@ class SyncService(private val context: Context) {
         } finally {
             channel?.disconnect()
             session?.disconnect()
+        }
+    }
+
+    private fun getRemoteCollections(channel: ChannelSftp, remotePath: String): Set<String> {
+        return try {
+            val entries = channel.ls(remotePath) as Vector<ChannelSftp.LsEntry>
+            entries.filter { entry ->
+                entry.attrs.isDir && entry.filename != "." && entry.filename != ".."
+            }.map { it.filename }.toSet()
+        } catch (e: Exception) {
+            emptySet()
+        }
+    }
+
+    private fun getRemoteFilesInCollection(channel: ChannelSftp, collectionPath: String): Set<String> {
+        return try {
+            val entries = channel.ls(collectionPath) as Vector<ChannelSftp.LsEntry>
+            entries.filter { entry ->
+                !entry.attrs.isDir && entry.filename != "." && entry.filename != ".."
+            }.map { it.filename }.toSet()
+        } catch (e: Exception) {
+            emptySet()
+        }
+    }
+
+    private fun deleteRemoteDirectory(channel: ChannelSftp, dirPath: String) {
+        try {
+            // First, delete all files in the directory
+            val entries = channel.ls(dirPath) as Vector<ChannelSftp.LsEntry>
+            for (entry in entries) {
+                if (entry.filename != "." && entry.filename != "..") {
+                    val entryPath = "$dirPath/${entry.filename}"
+                    if (entry.attrs.isDir) {
+                        // Recursively delete subdirectory
+                        deleteRemoteDirectory(channel, entryPath)
+                    } else {
+                        // Delete file
+                        channel.rm(entryPath)
+                    }
+                }
+            }
+            // Then delete the empty directory
+            channel.rmdir(dirPath)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }
