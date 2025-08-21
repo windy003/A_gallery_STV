@@ -45,6 +45,12 @@ class CollectionDetailViewModel(application: Application, private val dao: Colle
                 }
             }
         }
+
+    fun removeItemsFromCollection(mediaPaths: List<String>) = viewModelScope.launch {
+        mediaPaths.forEach { mediaPath ->
+            dao.removeItemFromCollection(collectionId, mediaPath)
+        }
+    }
 }
 
 class CollectionDetailViewModelFactory(private val application: Application, private val dao: CollectionDao, private val collectionId: Long) : ViewModelProvider.Factory {
