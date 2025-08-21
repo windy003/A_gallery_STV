@@ -21,8 +21,8 @@ class ZoomableRecyclerView @JvmOverloads constructor(
     private val maxScale = 3.0f
     
     // 网格列数配置
-    private val minColumns = 2
-    private val maxColumns = 6
+    private val minColumns = 1
+    private val maxColumns = 10
     private var currentColumns = 3
     
     private var photoAdapter: PhotoAdapter? = null
@@ -87,8 +87,15 @@ class ZoomableRecyclerView @JvmOverloads constructor(
         }
         
         override fun onScaleEnd(detector: ScaleGestureDetector) {
-            // 缩放结束后重置缩放因子，保持当前的列数
-            scaleFactor = 1.0f
+            // 缩放结束后更新缩放因子，以保持当前的列数
+            scaleFactor = when (currentColumns) {
+                maxColumns -> 0.5f // 6列
+                5 -> 0.7f          // 5列
+                4 -> 0.9f          // 4列
+                3 -> 1.1f          // 3列
+                minColumns -> 1.5f // 2列
+                else -> 1.1f       // 默认3列
+            }
         }
     }
     

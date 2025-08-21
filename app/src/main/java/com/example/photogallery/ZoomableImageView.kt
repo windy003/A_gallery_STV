@@ -31,6 +31,7 @@ class ZoomableImageView @JvmOverloads constructor(
     private var viewHeight = 0
     private var oldMeasuredWidth = 0
     private var oldMeasuredHeight = 0
+    private var isScaling = false
     
     // 性能优化：重用数组避免频繁创建
     private val matrixValues = FloatArray(9)
@@ -51,7 +52,6 @@ class ZoomableImageView @JvmOverloads constructor(
         scaleType = ScaleType.MATRIX
 
         setOnTouchListener { _, event ->
-            scaleDetector.onTouchEvent(event)
             val curr = PointF(event.x, event.y)
 
             when (event.action and MotionEvent.ACTION_MASK) {
@@ -63,13 +63,19 @@ class ZoomableImageView @JvmOverloads constructor(
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     savedMatrix.set(matrix)
                     midPoint(mid, event)
-                    mode = ZOOM
+                    mode = NONE  // 不立即进入ZOOM模式
+                    isScaling = false
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                     mode = NONE
+                    isScaling = false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (mode == DRAG) {
+                    if (event.pointerCount == 2) {
+                        // 双指操作，处理缩放检测
+                        scaleDetector.onTouchEvent(event)
+                    } else if (mode == DRAG) {
+                        // 单指拖拽
                         matrix.set(savedMatrix)
                         val dx = curr.x - start.x
                         val dy = curr.y - start.y
@@ -77,8 +83,13 @@ class ZoomableImageView @JvmOverloads constructor(
                     }
                 }
             }
-            imageMatrix = matrix
-            fixTranslation()
+            
+            // 只有在单指操作时才处理拖拽的matrix更新
+            if (event.pointerCount == 1 && mode == DRAG) {
+                imageMatrix = matrix
+                fixTranslation()
+            }
+            
             true
         }
     }
@@ -91,30 +102,50 @@ class ZoomableImageView @JvmOverloads constructor(
 
     private inner class ScaleListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-            mode = ZOOM
+            // 不要立即进入缩放模式，等待实际的缩放动作
+            savedMatrix.set(matrix)
+            isScaling = false
             return true
         }
 
         override fun onScale(detector: ScaleGestureDetector): Boolean {
-            var scaleFactor = detector.scaleFactor
-            val origScale = saveScale
-            saveScale *= scaleFactor
-
-            if (saveScale > maxScale) {
-                saveScale = maxScale
-                scaleFactor = maxScale / origScale
-            } else if (saveScale < minScale) {
-                saveScale = minScale
-                scaleFactor = minScale / origScale
-            }
-
-            // 性能优化：减少条件判断的复杂度
-            val focusX = if (originalWidth * saveScale <= viewWidth) viewWidth / 2f else detector.focusX
-            val focusY = if (originalHeight * saveScale <= viewHeight) viewHeight / 2f else detector.focusY
+            val scaleFactor = detector.scaleFactor
             
-            matrix.postScale(scaleFactor, scaleFactor, focusX, focusY)
-            fixTranslation()
+            // 只有当缩放因子明显偏离1.0时才开始真正的缩放
+            if (!isScaling && kotlin.math.abs(scaleFactor - 1.0f) > 0.05f) {
+                isScaling = true
+                mode = ZOOM
+            }
+            
+            // 只有在真正开始缩放时才处理缩放逻辑
+            if (isScaling) {
+                val origScale = saveScale
+                saveScale *= scaleFactor
+
+                if (saveScale > maxScale) {
+                    saveScale = maxScale
+                } else if (saveScale < minScale) {
+                    saveScale = minScale
+                }
+
+                val finalScaleFactor = saveScale / origScale
+                
+                // 性能优化：减少条件判断的复杂度
+                val focusX = if (originalWidth * saveScale <= viewWidth) viewWidth / 2f else detector.focusX
+                val focusY = if (originalHeight * saveScale <= viewHeight) viewHeight / 2f else detector.focusY
+                
+                matrix.set(savedMatrix)
+                matrix.postScale(finalScaleFactor, finalScaleFactor, focusX, focusY)
+                imageMatrix = matrix
+                fixTranslation()
+            }
+            
             return true
+        }
+
+        override fun onScaleEnd(detector: ScaleGestureDetector) {
+            isScaling = false
+            mode = NONE
         }
     }
 
@@ -138,9 +169,9 @@ class ZoomableImageView @JvmOverloads constructor(
 
         if (contentSize <= viewSize) {
             minTrans = 0f
-            maxTrans = viewSize - contentSize
+            maxTrans = (viewSize - contentSize) / 2f
         } else {
-            minTrans = viewSize - contentSize
+            minTrans = (viewSize - contentSize) / 2f
             maxTrans = 0f
         }
 
