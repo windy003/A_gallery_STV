@@ -13,6 +13,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.example.photogallery.data.AppDatabase
+import com.example.photogallery.data.Collection
+import com.example.photogallery.data.CollectionItem
 import com.example.photogallery.databinding.ActivityCollectionDetailBinding
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -79,6 +81,7 @@ class CollectionDetailActivity : AppCompatActivity() {
             onItemLongClick = { mediaItem ->
                 if (actionMode == null) {
                     actionMode = startActionMode(actionModeCallback)
+                    photoAdapter.selectionMode = true
                 }
                 toggleSelection(mediaItem)
             }
@@ -105,21 +108,15 @@ class CollectionDetailActivity : AppCompatActivity() {
             actionMode?.finish()
         } else {
             actionMode?.title = "$selectedCount selected"
-            // 当选择数量变化时，更新菜单
+            // 当选择数量变化时，强制更新菜单
             actionMode?.invalidate()
         }
     }
 
     private val actionModeCallback = object : ActionMode.Callback {
         override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-            // 根据选中项目数量选择菜单
-            val selectedCount = photoAdapter.getSelectedItems().size
-            val menuResource = if (selectedCount == 1) {
-                R.menu.collection_single_item_menu
-            } else {
-                R.menu.collection_detail_contextual_menu
-            }
-            mode?.menuInflater?.inflate(menuResource, menu)
+            // 默认加载单张图片的菜单，因为通常ActionMode是由长按单个项目触发的
+            mode?.menuInflater?.inflate(R.menu.collection_single_item_menu, menu)
             return true
         }
 
@@ -135,6 +132,10 @@ class CollectionDetailActivity : AppCompatActivity() {
             // 清除当前菜单并重新加载
             menu?.clear()
             mode?.menuInflater?.inflate(currentMenuResource, menu)
+            
+            // 更新标题
+            mode?.title = "$selectedCount selected"
+            
             return true
         }
 
@@ -142,6 +143,15 @@ class CollectionDetailActivity : AppCompatActivity() {
             return when (item?.itemId) {
                 R.id.action_remove_from_collection -> {
                     removeSelectedItemsFromCollection()
+                    mode?.finish()
+                    true
+                }
+                R.id.action_delete_item -> {
+                    val selectedItems = photoAdapter.getSelectedItems()
+                    if (selectedItems.size == 1) {
+                        val mediaItem = selectedItems.first()
+                        showDeleteConfirmDialog(mediaItem.path)
+                    }
                     mode?.finish()
                     true
                 }
@@ -159,6 +169,14 @@ class CollectionDetailActivity : AppCompatActivity() {
                     if (selectedItems.size == 1) {
                         val mediaItem = selectedItems.first()
                         showFileInfoDialog(mediaItem.path)
+                    }
+                    mode?.finish()
+                    true
+                }
+                R.id.action_add_to_collection -> {
+                    val selectedItems = photoAdapter.getSelectedItems()
+                    if (selectedItems.isNotEmpty()) {
+                        showCollectionSelectionDialog(selectedItems.map { it.path })
                     }
                     mode?.finish()
                     true
@@ -228,6 +246,112 @@ class CollectionDetailActivity : AppCompatActivity() {
             .setMessage(message)
             .setPositiveButton("确定", null)
             .show()
+    }
+
+    private fun showDeleteConfirmDialog(filePath: String) {
+        val file = File(filePath)
+        val fileName = file.name
+
+        AlertDialog.Builder(this)
+            .setTitle("删除文件")
+            .setMessage("确定要删除文件 \"$fileName\" 吗？\n\n此操作不可撤销！")
+            .setPositiveButton("删除") { _, _ ->
+                deleteMediaFile(filePath)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun deleteMediaFile(filePath: String) {
+        try {
+            val file = File(filePath)
+            if (file.exists() && file.delete()) {
+                // 从收藏中移除
+                viewModel.removeItemsFromCollection(listOf(filePath))
+                
+                Toast.makeText(this, "文件已删除", Toast.LENGTH_SHORT).show()
+                
+                // 记录变动日志
+                ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
+                    collectionName ?: "Collection", filePath
+                )
+            } else {
+                Toast.makeText(this, "删除失败，文件不存在或权限不足", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "删除失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showCollectionSelectionDialog(filePaths: List<String>) {
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@CollectionDetailActivity)
+                val allCollections = db.collectionDao().getAllCollectionsSync()
+                
+                // 过滤掉当前收藏列表
+                val otherCollections = allCollections.filter { it.id != collectionId }
+                
+                if (otherCollections.isEmpty()) {
+                    Toast.makeText(this@CollectionDetailActivity, "没有其他收藏列表", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                
+                val collectionNames = otherCollections.map { it.name }.toTypedArray()
+                
+                AlertDialog.Builder(this@CollectionDetailActivity)
+                    .setTitle("选择目标收藏列表")
+                    .setItems(collectionNames) { _, which ->
+                        val selectedCollection = otherCollections[which]
+                        addFilesToCollection(filePaths, selectedCollection)
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+                    
+            } catch (e: Exception) {
+                Toast.makeText(this@CollectionDetailActivity, "获取收藏列表失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun addFilesToCollection(filePaths: List<String>, targetCollection: Collection) {
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@CollectionDetailActivity)
+                var addedCount = 0
+                
+                filePaths.forEach { filePath ->
+                    // 检查文件是否已存在于目标收藏中
+                    val existingItems = db.collectionDao().getItemsForCollectionSync(targetCollection.id)
+                    val alreadyExists = existingItems.any { it.mediaPath == filePath }
+                    
+                    if (!alreadyExists) {
+                        val collectionItem = CollectionItem(
+                            collectionId = targetCollection.id,
+                            mediaPath = filePath
+                        )
+                        db.collectionDao().insertItemIntoCollection(collectionItem)
+                        addedCount++
+                        
+                        // 记录变动日志
+                        ChangeLogHelper.getInstance(this@CollectionDetailActivity).logItemAddedToCollection(
+                            targetCollection.name, filePath
+                        )
+                    }
+                }
+                
+                val message = if (addedCount == filePaths.size) {
+                    "已添加 $addedCount 个文件到 ${targetCollection.name}"
+                } else {
+                    "已添加 $addedCount 个文件到 ${targetCollection.name}（${filePaths.size - addedCount} 个文件已存在）"
+                }
+                
+                Toast.makeText(this@CollectionDetailActivity, message, Toast.LENGTH_SHORT).show()
+                
+            } catch (e: Exception) {
+                Toast.makeText(this@CollectionDetailActivity, "添加到收藏失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun renameFile(oldPath: String, newFileName: String, extension: String) {

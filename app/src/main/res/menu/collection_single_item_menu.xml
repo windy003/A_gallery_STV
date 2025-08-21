@@ -15,9 +15,21 @@
         app:showAsAction="ifRoom" />
         
     <item
+        android:id="@+id/action_delete_item"
+        android:icon="@android:drawable/ic_menu_delete"
+        android:title="删除"
+        app:showAsAction="ifRoom" />
+        
+    <item
         android:id="@+id/action_remove_from_collection"
         android:icon="@android:drawable/ic_menu_delete"
         android:title="从收藏中移除"
+        app:showAsAction="ifRoom" />
+        
+    <item
+        android:id="@+id/action_add_to_collection"
+        android:icon="@android:drawable/ic_menu_add"
+        android:title="添加到其他收藏"
         app:showAsAction="ifRoom" />
         
 </menu>

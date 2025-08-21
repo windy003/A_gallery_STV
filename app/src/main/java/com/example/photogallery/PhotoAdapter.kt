@@ -77,12 +77,8 @@ class PhotoAdapter(
 
             itemView.setOnClickListener {
                 if (selectionMode) {
-                    // Toggle selection
-                    if (isSelected) {
-                        // This logic will be handled by MainActivity
-                    } else {
-                        // This logic will be handled by MainActivity
-                    }
+                    // 在选择模式下，点击也触发选择逻辑
+                    onItemClick(mediaItem)
                 } else {
                     onItemClick(mediaItem)
                 }
