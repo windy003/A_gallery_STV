@@ -64,6 +64,9 @@ class ImageDetailActivity : AppCompatActivity() {
         
         binding.viewPager.adapter = imageAdapter
         
+        // 配置ViewPager2的滑动敏感度
+        ViewPager2Helper.configureSensitivity(binding.viewPager)
+        
         // 设置到当前图片位置
         if (currentIndex < imagePaths.size) {
             binding.viewPager.setCurrentItem(currentIndex, false)
