@@ -34,7 +34,6 @@ class SyncSettingsActivity : AppCompatActivity() {
 
         loadSettings()
         setupClickListeners()
-        loadLocalChangeInfo()
     }
 
     private fun loadSettings() {
@@ -60,10 +59,6 @@ class SyncSettingsActivity : AppCompatActivity() {
 
         binding.btnDownloadCollections.setOnClickListener {
             downloadCollections()
-        }
-
-        binding.btnRefreshVpsInfo.setOnClickListener {
-            refreshVpsInfo()
         }
 
         binding.btnCompareCollections.setOnClickListener {
@@ -123,9 +118,6 @@ class SyncSettingsActivity : AppCompatActivity() {
                     Toast.makeText(this@SyncSettingsActivity, 
                         if (success) "Collections uploaded successfully!" else "Upload failed!", 
                         Toast.LENGTH_SHORT).show()
-                    if (success) {
-                        loadLocalChangeInfo() // Refresh local info after upload
-                    }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -151,9 +143,6 @@ class SyncSettingsActivity : AppCompatActivity() {
                     Toast.makeText(this@SyncSettingsActivity, 
                         if (success) "Collections downloaded successfully!" else "Download failed!", 
                         Toast.LENGTH_SHORT).show()
-                    if (success) {
-                        loadLocalChangeInfo() // Refresh local info after download
-                    }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -202,63 +191,6 @@ class SyncSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadLocalChangeInfo() {
-        lifecycleScope.launch {
-            try {
-                val latestChange = syncService.getLocalLatestChange()
-                withContext(Dispatchers.Main) {
-                    if (latestChange != null) {
-                        binding.tvLocalLastChange.text = latestChange.description
-                        binding.tvLocalLastTime.text = formatTimestamp(latestChange.timestamp)
-                    } else {
-                        binding.tvLocalLastChange.text = "No changes recorded yet"
-                        binding.tvLocalLastTime.text = ""
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    binding.tvLocalLastChange.text = "Error loading local info"
-                    binding.tvLocalLastTime.text = e.message ?: "Unknown error"
-                }
-            }
-        }
-    }
-
-    private fun refreshVpsInfo() {
-        if (!validateSettings()) return
-
-        binding.tvVpsLastChange.text = "Checking VPS information..."
-        binding.tvVpsLastTime.text = ""
-        binding.btnRefreshVpsInfo.isEnabled = false
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val config = getSyncConfig()
-                val vpsInfo = syncService.getVpsLatestChange(config)
-                
-                withContext(Dispatchers.Main) {
-                    binding.btnRefreshVpsInfo.isEnabled = true
-                    if (vpsInfo != null) {
-                        binding.tvVpsLastChange.text = vpsInfo.description
-                        if (vpsInfo.lastModified > 0) {
-                            binding.tvVpsLastTime.text = "Last modified: ${formatTimestamp(vpsInfo.lastModified)}"
-                        } else {
-                            binding.tvVpsLastTime.text = "No collections found on VPS"
-                        }
-                    } else {
-                        binding.tvVpsLastChange.text = "Failed to connect to VPS"
-                        binding.tvVpsLastTime.text = "Check your connection settings"
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    binding.btnRefreshVpsInfo.isEnabled = true
-                    binding.tvVpsLastChange.text = "Error connecting to VPS"
-                    binding.tvVpsLastTime.text = e.message ?: "Unknown error"
-                }
-            }
-        }
-    }
 
     private fun compareCollections() {
         if (!validateSettings()) return
