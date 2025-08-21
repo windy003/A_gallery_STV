@@ -12,10 +12,12 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.ActionMode
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -25,6 +27,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.photogallery.data.AppDatabase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -94,6 +97,10 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.action_sync -> {
                 startActivity(Intent(this, SyncSettingsActivity::class.java))
+                true
+            }
+            R.id.action_show_file_list -> {
+                showFileListDialog()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -657,5 +664,100 @@ class MainActivity : AppCompatActivity() {
         }
         
         return null
+    }
+
+    private fun showFileListDialog() {
+        val mediaItems = photoAdapter.getMediaItems()
+        if (mediaItems.isEmpty()) {
+            Toast.makeText(this, "没有文件可显示", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 创建文件列表
+        val fileList = mediaItems.map { mediaItem ->
+            val fileName = File(mediaItem.path).name
+            FileListItem(fileName, mediaItem.path, mediaItem.isVideo)
+        }.sortedBy { it.fileName.lowercase() } // 按文件名排序
+
+        // 创建对话框视图
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_file_list, null)
+        val recyclerView = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerViewFileList)
+        val titleTextView = dialogView.findViewById<TextView>(R.id.tvTitle)
+        
+        titleTextView.text = "文件名列表 (${fileList.size} 个文件)"
+        
+        // 创建文件列表适配器，添加长按事件监听
+        val fileListAdapter = FileListAdapter(fileList, object : FileListItemClickListener {
+            override fun onItemLongClick(fileItem: FileListItem) {
+                showFileItemMenu(fileItem)
+            }
+        })
+        
+        // 设置RecyclerView
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = fileListAdapter
+
+        // 显示对话框
+        AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setPositiveButton("确定", null)
+            .show()
+    }
+
+    private fun showFileItemMenu(fileItem: FileListItem) {
+        val options = arrayOf("重命名", "删除", "添加到收藏")
+        
+        AlertDialog.Builder(this)
+            .setTitle(fileItem.fileName)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showEditFilenameDialog(fileItem.filePath) // 重命名
+                    1 -> showDeleteConfirmDialog(listOf(fileItem.filePath)) // 删除
+                    2 -> showCollectionsDialogForFile(fileItem.filePath) // 添加到收藏
+                }
+            }
+            .show()
+    }
+
+    private fun showCollectionsDialogForFile(filePath: String) {
+        lifecycleScope.launch {
+            val allCollections = viewModel.getAllCollections().first()
+            
+            if (allCollections.isEmpty()) {
+                Toast.makeText(this@MainActivity, "没有收藏列表，请先创建收藏列表", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            val collectionNames = allCollections.map { it.name }.toTypedArray()
+            val checkedItems = BooleanArray(allCollections.size) { false }
+            val selectedCollectionIds = mutableListOf<Long>()
+
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("添加到收藏列表")
+                .setMultiChoiceItems(collectionNames, checkedItems) { _, which, isChecked ->
+                    val collectionId = allCollections[which].id
+                    if (isChecked) {
+                        selectedCollectionIds.add(collectionId)
+                    } else {
+                        selectedCollectionIds.remove(collectionId)
+                    }
+                }
+                .setPositiveButton("确定") { _, _ ->
+                    if (selectedCollectionIds.isNotEmpty()) {
+                        viewModel.updateImageInCollections(listOf(filePath), selectedCollectionIds)
+                        
+                        // Log the change
+                        lifecycleScope.launch {
+                            val collections = viewModel.getAllCollections().first()
+                            val selectedCollectionNames = collections.filter { selectedCollectionIds.contains(it.id) }.map { it.name }
+                            ChangeLogHelper.getInstance(this@MainActivity).logMultipleItemsAddedToCollections(listOf(filePath), selectedCollectionNames)
+                        }
+                        
+                        Toast.makeText(this@MainActivity, "已添加到 ${selectedCollectionIds.size} 个收藏列表", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        }
     }
 }

@@ -12,12 +12,14 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.photogallery.data.AppDatabase
 import com.example.photogallery.data.Collection
 import com.example.photogallery.data.CollectionItem
 import com.example.photogallery.databinding.ActivityCollectionDetailBinding
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import android.view.LayoutInflater
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -94,6 +96,21 @@ class CollectionDetailActivity : AppCompatActivity() {
             viewModel.mediaItems.collectLatest {
                 photoAdapter.submitList(it)
             }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.collection_detail_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_show_file_list -> {
+                showFileListDialog()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
@@ -409,6 +426,77 @@ class CollectionDetailActivity : AppCompatActivity() {
         } catch (e: Exception) {
             ""
         }
+    }
+
+    private fun showFileListDialog() {
+        val mediaItems = photoAdapter.getMediaItems()
+        if (mediaItems.isEmpty()) {
+            Toast.makeText(this, "没有文件可显示", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 创建文件列表
+        val fileList = mediaItems.map { mediaItem ->
+            val fileName = File(mediaItem.path).name
+            FileListItem(fileName, mediaItem.path, mediaItem.isVideo)
+        }.sortedBy { it.fileName.lowercase() } // 按文件名排序
+
+        // 创建对话框视图
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_file_list, null)
+        val recyclerView = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerViewFileList)
+        val titleTextView = dialogView.findViewById<android.widget.TextView>(R.id.tvTitle)
+        
+        titleTextView.text = "${collectionName ?: "收藏"} - 文件名列表 (${fileList.size} 个文件)"
+        
+        // 创建文件列表适配器，添加长按事件监听
+        val fileListAdapter = FileListAdapter(fileList, object : FileListItemClickListener {
+            override fun onItemLongClick(fileItem: FileListItem) {
+                showFileItemMenu(fileItem)
+            }
+        })
+        
+        // 设置RecyclerView
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = fileListAdapter
+
+        // 显示对话框
+        AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setPositiveButton("确定", null)
+            .show()
+    }
+
+    private fun showFileItemMenu(fileItem: FileListItem) {
+        val options = arrayOf("重命名", "删除", "从收藏中移除", "添加到其他收藏")
+        
+        AlertDialog.Builder(this)
+            .setTitle(fileItem.fileName)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showEditFilenameDialog(fileItem.filePath) // 重命名
+                    1 -> showDeleteConfirmDialog(fileItem.filePath) // 删除
+                    2 -> removeFromCollection(fileItem.filePath) // 从收藏中移除
+                    3 -> showCollectionSelectionDialog(listOf(fileItem.filePath)) // 添加到其他收藏
+                }
+            }
+            .show()
+    }
+
+    private fun removeFromCollection(filePath: String) {
+        AlertDialog.Builder(this)
+            .setTitle("确认移除")
+            .setMessage("确定要从当前收藏列表中移除此文件吗？")
+            .setPositiveButton("移除") { _, _ ->
+                viewModel.removeItemsFromCollection(listOf(filePath))
+                Toast.makeText(this, "已从收藏中移除", Toast.LENGTH_SHORT).show()
+                
+                // 记录变动日志
+                ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
+                    collectionName ?: "Collection", filePath
+                )
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     override fun onSupportNavigateUp(): Boolean {
