@@ -6,9 +6,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.GridLayoutManager
 
@@ -19,7 +22,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: ZoomableRecyclerView
     private lateinit var photoAdapter: PhotoAdapter
-    private val mediaItems = mutableListOf<MediaItem>()
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -34,15 +36,33 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val toolbar: Toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+
         setupRecyclerView()
         checkPermissionAndLoadMedia()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_collections -> {
+                startActivity(Intent(this, CollectionsActivity::class.java))
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     private fun setupRecyclerView() {
         recyclerView = findViewById(R.id.recyclerView)
         recyclerView.layoutManager = GridLayoutManager(this, 3)
 
-        photoAdapter = PhotoAdapter(mediaItems) { mediaItem ->
+        photoAdapter = PhotoAdapter { mediaItem ->
             if (mediaItem.isVideo) {
                 val intent = Intent(this, VideoPlayerActivity::class.java)
                 intent.putExtra("video_path", mediaItem.path)
@@ -76,7 +96,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadMedia() {
-        mediaItems.clear()
+        val mediaItems = mutableListOf<MediaItem>()
 
         // Load Images
         val imageProjection = arrayOf(MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_ADDED)
@@ -124,7 +144,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             findViewById<View>(R.id.tvNoImages).visibility = View.GONE
             recyclerView.visibility = View.VISIBLE
-            photoAdapter.notifyDataSetChanged()
+            photoAdapter.submitList(mediaItems)
         }
     }
 }

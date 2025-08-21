@@ -24,6 +24,7 @@ class ZoomableRecyclerView @JvmOverloads constructor(
     private val minColumns = 1
     private val maxColumns = 10
     private var currentColumns = 3
+    private var isScaling = false
     
     private var photoAdapter: PhotoAdapter? = null
 
@@ -58,35 +59,46 @@ class ZoomableRecyclerView @JvmOverloads constructor(
 
     private inner class ScaleListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
-            val previousScaleFactor = scaleFactor
-            scaleFactor *= detector.scaleFactor
-            scaleFactor = max(minScale, min(scaleFactor, maxScale))
+            val detectorScaleFactor = detector.scaleFactor
             
-            // 根据缩放因子调整网格列数，增加更细致的级别
-            val newColumns = when {
-                scaleFactor <= 0.6f -> maxColumns    // 非常小：6列
-                scaleFactor <= 0.8f -> 5             // 较小：5列
-                scaleFactor <= 1.0f -> 4             // 小：4列
-                scaleFactor <= 1.2f -> 3             // 默认：3列
-                scaleFactor <= 1.8f -> 2             // 大：2列
-                else -> minColumns                   // 非常大：2列
+            // 只有当缩放因子明显偏离1.0时才开始真正的缩放
+            if (!isScaling && kotlin.math.abs(detectorScaleFactor - 1.0f) > 0.1f) {
+                isScaling = true
             }
             
-            // 只有当列数确实需要改变时才更新布局，避免频繁刷新
-            if (newColumns != currentColumns) {
-                currentColumns = newColumns
-                // 移除post调用，直接在当前线程执行
-                updateGridLayout()
+            // 只有在真正开始缩放时才处理缩放逻辑
+            if (isScaling) {
+                scaleFactor *= detectorScaleFactor
+                scaleFactor = max(minScale, min(scaleFactor, maxScale))
+                
+                // 根据缩放因子调整网格列数，增加更细致的级别
+                val newColumns = when {
+                    scaleFactor <= 0.6f -> maxColumns    // 非常小：6列
+                    scaleFactor <= 0.8f -> 5             // 较小：5列
+                    scaleFactor <= 1.0f -> 4             // 小：4列
+                    scaleFactor <= 1.2f -> 3             // 默认：3列
+                    scaleFactor <= 1.8f -> 2             // 大：2列
+                    else -> minColumns                   // 非常大：2列
+                }
+                
+                // 只有当列数确实需要改变时才更新布局，避免频繁刷新
+                if (newColumns != currentColumns) {
+                    currentColumns = newColumns
+                    // 移除post调用，直接在当前线程执行
+                    updateGridLayout()
+                }
             }
             
             return true
         }
         
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            isScaling = false
             return true
         }
         
         override fun onScaleEnd(detector: ScaleGestureDetector) {
+            isScaling = false
             // 缩放结束后更新缩放因子，以保持当前的列数
             scaleFactor = when (currentColumns) {
                 maxColumns -> 0.5f // 6列
