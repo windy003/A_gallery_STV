@@ -1,11 +1,16 @@
 package com.example.photogallery
 
 import android.Manifest
+import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
@@ -47,6 +52,20 @@ class MainActivity : AppCompatActivity() {
             loadMedia()
         }
     }
+
+    private val requestManageStorageLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                Toast.makeText(this, "已获得存储管理权限", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "需要存储管理权限才能删除文件", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private var pendingDeletePaths: List<String> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -198,6 +217,24 @@ class MainActivity : AppCompatActivity() {
                     if (selectedItems.size == 1) {
                         val mediaItem = selectedItems.first()
                         showFileInfoDialog(mediaItem)
+                    }
+                    mode?.finish()
+                    true
+                }
+                R.id.action_delete_item -> {
+                    val selectedItems = photoAdapter.getSelectedItems()
+                    if (selectedItems.size == 1) {
+                        val mediaItem = selectedItems.first()
+                        showDeleteConfirmDialog(listOf(mediaItem.path))
+                    }
+                    mode?.finish()
+                    true
+                }
+                R.id.action_delete_items -> {
+                    val selectedItems = photoAdapter.getSelectedItems()
+                    if (selectedItems.isNotEmpty()) {
+                        val filePaths = selectedItems.map { it.path }
+                        showDeleteConfirmDialog(filePaths)
                     }
                     mode?.finish()
                     true
@@ -445,5 +482,180 @@ class MainActivity : AppCompatActivity() {
             hours > 0 -> String.format("%02d:%02d:%02d", hours, minutes % 60, seconds % 60)
             else -> String.format("%02d:%02d", minutes, seconds % 60)
         }
+    }
+
+    private fun showDeleteConfirmDialog(filePaths: List<String>) {
+        val message = if (filePaths.size == 1) {
+            val fileName = File(filePaths.first()).name
+            "确定要删除文件 \"$fileName\" 吗？\n\n此操作不可撤销！"
+        } else {
+            "确定要删除选中的 ${filePaths.size} 个文件吗？\n\n此操作不可撤销！"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("删除文件")
+            .setMessage(message)
+            .setPositiveButton("删除") { _, _ ->
+                pendingDeletePaths = filePaths
+                checkDeletePermissionAndDelete()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun checkDeletePermissionAndDelete() {
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                // Android 11+: 需要 MANAGE_EXTERNAL_STORAGE 权限
+                if (Environment.isExternalStorageManager()) {
+                    deleteFiles(pendingDeletePaths)
+                } else {
+                    requestManageExternalStoragePermission()
+                }
+            }
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> {
+                // Android 10: 使用 MediaStore API
+                deleteFilesWithMediaStore(pendingDeletePaths)
+            }
+            else -> {
+                // Android 9 及以下: 检查 WRITE_EXTERNAL_STORAGE 权限
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) 
+                    == PackageManager.PERMISSION_GRANTED) {
+                    deleteFiles(pendingDeletePaths)
+                } else {
+                    requestPermissionLauncher.launch(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))
+                }
+            }
+        }
+    }
+
+    private fun requestManageExternalStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                intent.data = Uri.parse("package:$packageName")
+                requestManageStorageLauncher.launch(intent)
+            } catch (e: Exception) {
+                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                requestManageStorageLauncher.launch(intent)
+            }
+        }
+    }
+
+    private fun deleteFiles(filePaths: List<String>) {
+        var deletedCount = 0
+        var failedCount = 0
+
+        filePaths.forEach { filePath ->
+            try {
+                val file = File(filePath)
+                if (file.exists() && file.delete()) {
+                    deletedCount++
+                    
+                    // 记录变动日志
+                    ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
+                        "Main Gallery", filePath
+                    )
+                } else {
+                    failedCount++
+                }
+            } catch (e: Exception) {
+                failedCount++
+                android.util.Log.e("MainActivity", "Failed to delete file: $filePath", e)
+            }
+        }
+
+        val message = when {
+            failedCount == 0 -> "已删除 $deletedCount 个文件"
+            deletedCount == 0 -> "删除失败，请检查权限"
+            else -> "已删除 $deletedCount 个文件，$failedCount 个文件删除失败"
+        }
+
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+
+        // 重新加载媒体文件列表以反映更改
+        if (deletedCount > 0) {
+            loadMedia()
+        }
+    }
+
+    private fun deleteFilesWithMediaStore(filePaths: List<String>) {
+        var deletedCount = 0
+        var failedCount = 0
+
+        filePaths.forEach { filePath ->
+            try {
+                val uri = getMediaUriFromPath(filePath)
+                if (uri != null) {
+                    val deletedRows = contentResolver.delete(uri, null, null)
+                    if (deletedRows > 0) {
+                        deletedCount++
+                        
+                        // 记录变动日志
+                        ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
+                            "Main Gallery", filePath
+                        )
+                    } else {
+                        failedCount++
+                    }
+                } else {
+                    // 如果无法通过MediaStore删除，尝试直接删除文件
+                    val file = File(filePath)
+                    if (file.exists() && file.delete()) {
+                        deletedCount++
+                        
+                        // 记录变动日志
+                        ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
+                            "Main Gallery", filePath
+                        )
+                    } else {
+                        failedCount++
+                    }
+                }
+            } catch (e: Exception) {
+                failedCount++
+                android.util.Log.e("MainActivity", "Failed to delete file: $filePath", e)
+            }
+        }
+
+        val message = when {
+            failedCount == 0 -> "已删除 $deletedCount 个文件"
+            deletedCount == 0 -> "删除失败，请检查权限"
+            else -> "已删除 $deletedCount 个文件，$failedCount 个文件删除失败"
+        }
+
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+
+        // 重新加载媒体文件列表以反映更改
+        if (deletedCount > 0) {
+            loadMedia()
+        }
+    }
+
+    private fun getMediaUriFromPath(filePath: String): Uri? {
+        val file = File(filePath)
+        val isImage = filePath.lowercase().run {
+            endsWith(".jpg") || endsWith(".jpeg") || endsWith(".png") || 
+            endsWith(".gif") || endsWith(".bmp") || endsWith(".webp")
+        }
+        
+        val contentUri = if (isImage) {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+        
+        val projection = arrayOf(MediaStore.MediaColumns._ID)
+        val selection = "${MediaStore.MediaColumns.DATA} = ?"
+        val selectionArgs = arrayOf(filePath)
+        
+        contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                return ContentUris.withAppendedId(contentUri, id)
+            }
+        }
+        
+        return null
     }
 }
