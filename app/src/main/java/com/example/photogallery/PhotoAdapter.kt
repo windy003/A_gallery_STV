@@ -52,6 +52,8 @@ class PhotoAdapter(
 
     fun getSelectedItems(): Set<MediaItem> = selectedItems
 
+    fun getMediaItems(): List<MediaItem> = currentList
+
     class PhotoViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val imageView: ImageView = itemView.findViewById(R.id.imageView)
         private val playIcon: ImageView = itemView.findViewById(R.id.playIcon)

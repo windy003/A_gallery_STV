@@ -53,7 +53,16 @@ class CollectionDetailActivity : AppCompatActivity() {
                         }
                     } else {
                         Intent(this, ImageDetailActivity::class.java).apply {
-                            putExtra("image_path", mediaItem.path)
+                            // 获取所有图片路径（非视频）
+                            val allImagePaths = photoAdapter.getMediaItems()
+                                .filter { !it.isVideo }
+                                .map { it.path }
+                                .toTypedArray()
+                            
+                            val currentIndex = allImagePaths.indexOf(mediaItem.path)
+                            
+                            putExtra("image_paths", allImagePaths)
+                            putExtra("current_index", currentIndex)
                         }
                     }
                     startActivity(intent)

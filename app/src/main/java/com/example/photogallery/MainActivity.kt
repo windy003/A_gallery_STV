@@ -90,7 +90,17 @@ class MainActivity : AppCompatActivity() {
                         startActivity(intent)
                     } else {
                         val intent = Intent(this, ImageDetailActivity::class.java)
-                        intent.putExtra("image_path", mediaItem.path)
+                        
+                        // 获取所有图片路径（非视频）
+                        val allImagePaths = photoAdapter.getMediaItems()
+                            .filter { !it.isVideo }
+                            .map { it.path }
+                            .toTypedArray()
+                        
+                        val currentIndex = allImagePaths.indexOf(mediaItem.path)
+                        
+                        intent.putExtra("image_paths", allImagePaths)
+                        intent.putExtra("current_index", currentIndex)
                         startActivity(intent)
                     }
                 }
