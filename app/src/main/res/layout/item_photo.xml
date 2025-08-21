@@ -7,11 +7,26 @@
     app:cardCornerRadius="8dp"
     app:cardElevation="4dp">
 
-    <com.example.photogallery.SquareImageView
-        android:id="@+id/imageView"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:contentDescription="Photo" />
+        android:layout_height="wrap_content">
+
+        <com.example.photogallery.SquareImageView
+            android:id="@+id/imageView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="Photo" />
+
+        <ImageView
+            android:id="@+id/playIcon"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:src="@android:drawable/ic_media_play"
+            android:visibility="gone"
+            android:contentDescription="Play Video" />
+
+    </FrameLayout>
 
 </androidx.cardview.widget.CardView>
