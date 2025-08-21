@@ -13,7 +13,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.GridLayoutManager
 
 // Data class to hold media items
-data class MediaItem(val path: String, val isVideo: Boolean, val dateAdded: Long)
+data class MediaItem(val path: String, val isVideo: Boolean, val dateAdded: Long, val duration: Long = 0)
 
 class MainActivity : AppCompatActivity() {
 
@@ -97,7 +97,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Load Videos
-        val videoProjection = arrayOf(MediaStore.Video.Media.DATA, MediaStore.Video.Media.DATE_ADDED)
+        val videoProjection = arrayOf(MediaStore.Video.Media.DATA, MediaStore.Video.Media.DATE_ADDED, MediaStore.Video.Media.DURATION)
         contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
             videoProjection,
@@ -107,10 +107,12 @@ class MainActivity : AppCompatActivity() {
         )?.use { cursor ->
             val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
             val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+            val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
             while (cursor.moveToNext()) {
                 val path = cursor.getString(pathColumn)
                 val date = cursor.getLong(dateColumn)
-                mediaItems.add(MediaItem(path, true, date))
+                val duration = cursor.getLong(durationColumn)
+                mediaItems.add(MediaItem(path, true, date, duration))
             }
         }
 
