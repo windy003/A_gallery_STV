@@ -114,6 +114,7 @@ class MainActivity : AppCompatActivity() {
             onItemLongClick = { mediaItem ->
                 if (actionMode == null) {
                     actionMode = startActionMode(actionModeCallback)
+                    photoAdapter.selectionMode = true
                 }
                 toggleSelection(mediaItem)
             }
@@ -139,14 +140,9 @@ class MainActivity : AppCompatActivity() {
 
     private val actionModeCallback = object : ActionMode.Callback {
         override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-            // 根据选中项目数量选择菜单
-            val selectedCount = photoAdapter.getSelectedItems().size
-            val menuResource = if (selectedCount == 1) {
-                R.menu.main_single_item_menu
-            } else {
-                R.menu.contextual_action_bar_menu
-            }
-            mode?.menuInflater?.inflate(menuResource, menu)
+            // 第一次创建ActionMode时，默认使用单选菜单，因为通常是长按单个项目触发的
+            mode?.menuInflater?.inflate(R.menu.main_single_item_menu, menu)
+            android.util.Log.d("MainActivity", "onCreateActionMode: single item menu loaded, menu size: ${menu?.size()}")
             return true
         }
 
@@ -159,9 +155,21 @@ class MainActivity : AppCompatActivity() {
                 R.menu.contextual_action_bar_menu
             }
             
+            android.util.Log.d("MainActivity", "onPrepareActionMode: selectedCount=$selectedCount, using menu=${if (selectedCount == 1) "single" else "multi"}")
+            
             // 清除当前菜单并重新加载
             menu?.clear()
             mode?.menuInflater?.inflate(currentMenuResource, menu)
+            
+            // 更新标题
+            mode?.title = "$selectedCount selected"
+            
+            android.util.Log.d("MainActivity", "onPrepareActionMode: menu size after inflate: ${menu?.size()}")
+            for (i in 0 until (menu?.size() ?: 0)) {
+                val item = menu?.getItem(i)
+                android.util.Log.d("MainActivity", "Menu item $i: id=${item?.itemId}, title=${item?.title}")
+            }
+            
             return true
         }
 
