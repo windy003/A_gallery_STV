@@ -15,6 +15,7 @@ data class FileListItem(
 )
 
 interface FileListItemClickListener {
+    fun onItemClick(fileItem: FileListItem)
     fun onItemLongClick(fileItem: FileListItem)
 }
 
@@ -46,6 +47,11 @@ class FileListAdapter(
             android.R.drawable.ic_menu_gallery // 图片图标
         }
         holder.fileIcon.setImageResource(iconRes)
+        
+        // 设置点击事件
+        holder.itemView.setOnClickListener {
+            clickListener?.onItemClick(fileItem)
+        }
         
         // 设置长按事件
         holder.itemView.setOnLongClickListener {

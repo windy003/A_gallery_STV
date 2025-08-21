@@ -686,8 +686,12 @@ class MainActivity : AppCompatActivity() {
         
         titleTextView.text = "文件名列表 (${fileList.size} 个文件)"
         
-        // 创建文件列表适配器，添加长按事件监听
+        // 创建文件列表适配器，添加点击和长按事件监听
         val fileListAdapter = FileListAdapter(fileList, object : FileListItemClickListener {
+            override fun onItemClick(fileItem: FileListItem) {
+                openFileFromList(fileItem)
+            }
+            
             override fun onItemLongClick(fileItem: FileListItem) {
                 showFileItemMenu(fileItem)
             }
@@ -758,6 +762,46 @@ class MainActivity : AppCompatActivity() {
                 }
                 .setNegativeButton("取消", null)
                 .show()
+        }
+    }
+
+    private fun openFileFromList(fileItem: FileListItem) {
+        if (fileItem.filePath.isEmpty()) {
+            Toast.makeText(this, "无法打开文件：文件路径为空", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val file = File(fileItem.filePath)
+        if (!file.exists()) {
+            Toast.makeText(this, "文件不存在：${fileItem.fileName}", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (fileItem.isVideo) {
+            // 打开视频播放器
+            val intent = Intent(this, VideoPlayerActivity::class.java)
+            intent.putExtra("video_path", fileItem.filePath)
+            startActivity(intent)
+        } else {
+            // 打开图片详情页面
+            val allImagePaths = photoAdapter.getMediaItems()
+                .filter { !it.isVideo }
+                .map { it.path }
+                .toTypedArray()
+            
+            val currentIndex = allImagePaths.indexOf(fileItem.filePath)
+            if (currentIndex >= 0) {
+                val intent = Intent(this, ImageDetailActivity::class.java)
+                intent.putExtra("image_paths", allImagePaths)
+                intent.putExtra("current_index", currentIndex)
+                startActivity(intent)
+            } else {
+                // 如果在当前列表中找不到，单独显示这张图片
+                val intent = Intent(this, ImageDetailActivity::class.java)
+                intent.putExtra("image_paths", arrayOf(fileItem.filePath))
+                intent.putExtra("current_index", 0)
+                startActivity(intent)
+            }
         }
     }
 }

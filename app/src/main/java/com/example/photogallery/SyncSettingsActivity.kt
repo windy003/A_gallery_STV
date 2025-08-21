@@ -1,15 +1,18 @@
 package com.example.photogallery
 
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.example.photogallery.data.AppDatabase
 import com.example.photogallery.databinding.ActivitySyncSettingsBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class SyncSettingsActivity : AppCompatActivity() {
 
@@ -441,9 +444,19 @@ class SyncSettingsActivity : AppCompatActivity() {
             )
         }
         
-        // 设置RecyclerView（不添加点击事件，仅显示）
+        // 设置RecyclerView，添加点击事件尝试查找并打开文件
         recyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
-        recyclerView.adapter = FileListAdapter(fileList)
+        recyclerView.adapter = FileListAdapter(fileList, object : FileListItemClickListener {
+            override fun onItemClick(fileItem: FileListItem) {
+                // 尝试在本地查找同名文件并打开
+                findAndOpenLocalFile(fileItem.fileName)
+            }
+            
+            override fun onItemLongClick(fileItem: FileListItem) {
+                // 显示文件信息
+                showSyncFileInfo(fileItem.fileName)
+            }
+        })
         
         // 显示对话框
         androidx.appcompat.app.AlertDialog.Builder(this)
@@ -455,6 +468,91 @@ class SyncSettingsActivity : AppCompatActivity() {
     private fun formatTimestamp(timestamp: Long): String {
         val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
         return dateFormat.format(java.util.Date(timestamp))
+    }
+
+    private fun findAndOpenLocalFile(fileName: String) {
+        lifecycleScope.launch {
+            try {
+                // 在所有收藏中查找同名文件
+                val database = AppDatabase.getDatabase(this@SyncSettingsActivity)
+                val allCollections = database.collectionDao().getAllCollectionsSync()
+                var foundFilePath: String? = null
+                
+                for (collection in allCollections) {
+                    val items = database.collectionDao().getItemsForCollectionSync(collection.id)
+                    val matchingItem = items.find { item ->
+                        File(item.mediaPath).name == fileName
+                    }
+                    if (matchingItem != null) {
+                        foundFilePath = matchingItem.mediaPath
+                        break
+                    }
+                }
+                
+                withContext(Dispatchers.Main) {
+                    if (foundFilePath != null) {
+                        openFoundFile(foundFilePath, fileName)
+                    } else {
+                        Toast.makeText(this@SyncSettingsActivity, 
+                            "在本地收藏中未找到文件：$fileName", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@SyncSettingsActivity, 
+                        "查找文件时出错：${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
+    private fun openFoundFile(filePath: String, fileName: String) {
+        val file = File(filePath)
+        if (!file.exists()) {
+            Toast.makeText(this, "文件不存在：$fileName", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val isVideo = fileName.lowercase().let { 
+            it.endsWith(".mp4") || it.endsWith(".avi") || it.endsWith(".mov") || 
+            it.endsWith(".mkv") || it.endsWith(".wmv") || it.endsWith(".flv") 
+        }
+        
+        if (isVideo) {
+            // 打开视频播放器
+            val intent = Intent(this, VideoPlayerActivity::class.java)
+            intent.putExtra("video_path", filePath)
+            startActivity(intent)
+        } else {
+            // 打开图片详情页面
+            val intent = Intent(this, ImageDetailActivity::class.java)
+            intent.putExtra("image_paths", arrayOf(filePath))
+            intent.putExtra("current_index", 0)
+            startActivity(intent)
+        }
+    }
+    
+    private fun showSyncFileInfo(fileName: String) {
+        val isVideo = fileName.lowercase().let { 
+            it.endsWith(".mp4") || it.endsWith(".avi") || it.endsWith(".mov") || 
+            it.endsWith(".mkv") || it.endsWith(".wmv") || it.endsWith(".flv") 
+        }
+        
+        val fileType = if (isVideo) "视频文件" else "图片文件"
+        val message = """
+            文件名: $fileName
+            文件类型: $fileType
+            
+            提示：
+            • 点击文件名可尝试在本地收藏中查找并打开
+            • 如果文件在本地不存在，可能只存在于VPS上
+        """.trimIndent()
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("文件信息")
+            .setMessage(message)
+            .setPositiveButton("确定", null)
+            .show()
     }
 
     override fun onSupportNavigateUp(): Boolean {
