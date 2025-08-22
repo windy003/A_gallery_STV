@@ -220,73 +220,112 @@ class SyncSettingsActivity : AppCompatActivity() {
     }
 
     private fun showComparisonDialog(result: ComparisonResult) {
-        val message = StringBuilder()
-        
-        // Only local collections
-        if (result.onlyLocal.isNotEmpty()) {
-            message.append("📱 Only on Local (${result.onlyLocal.size}):\n")
-            result.onlyLocal.forEach { name ->
-                message.append("  • $name\n")
-            }
-            message.append("\n")
-        }
-        
-        // Only remote collections
-        if (result.onlyRemote.isNotEmpty()) {
-            message.append("☁️ Only on VPS (${result.onlyRemote.size}):\n")
-            result.onlyRemote.forEach { name ->
-                message.append("  • $name\n")
-            }
-            message.append("\n")
-        }
-        
-        // Different collections
-        if (result.different.isNotEmpty()) {
-            message.append("⚠️ Different Content (${result.different.size}):\n")
-            result.different.forEach { diff ->
-                message.append("  📂 ${diff.name}:\n")
-                if (diff.onlyInLocal.isNotEmpty()) {
-                    message.append("    📱 Only on Local (${diff.onlyInLocal.size}):\n")
-                    diff.onlyInLocal.take(10).forEach { fileName ->
-                        message.append("      • $fileName\n")
+        lifecycleScope.launch {
+            try {
+                val message = StringBuilder()
+                
+                // Only local collections - 显示收藏名称和其中的文件
+                if (result.onlyLocal.isNotEmpty()) {
+                    message.append("📱 只在本地的收藏 (${result.onlyLocal.size}个):\n")
+                    for (collectionName in result.onlyLocal) {
+                        val fileCount = getLocalCollectionFileCount(collectionName)
+                        message.append("  📂 $collectionName (${fileCount}个文件)\n")
+                        
+                        // 显示该收藏中的文件
+                        val files = getLocalCollectionFiles(collectionName)
+                        files.take(10).forEach { fileName ->
+                            message.append("      📄 $fileName\n")
+                        }
+                        if (files.size > 10) {
+                            message.append("      ... 还有${files.size - 10}个文件\n")
+                        }
                     }
-                    if (diff.onlyInLocal.size > 10) {
-                        message.append("      ... and ${diff.onlyInLocal.size - 10} more\n")
+                    message.append("\n")
+                }
+                
+                // Only remote collections - 显示收藏名称和其中的文件
+                if (result.onlyRemote.isNotEmpty()) {
+                    message.append("☁️ 只在VPS上的收藏 (${result.onlyRemote.size}个):\n")
+                    for (collectionName in result.onlyRemote) {
+                        val files = getRemoteCollectionFiles(collectionName, result)
+                        message.append("  📂 $collectionName (${files.size}个文件)\n")
+                        
+                        // 显示该收藏中的文件
+                        files.take(10).forEach { fileName ->
+                            message.append("      📥 $fileName\n")
+                        }
+                        if (files.size > 10) {
+                            message.append("      ... 还有${files.size - 10}个文件\n")
+                        }
+                    }
+                    message.append("\n")
+                }
+                
+                // Different collections - 在协程中检查文件存在性
+                if (result.different.isNotEmpty()) {
+                    message.append("⚠️ Different Content (${result.different.size}):\n")
+                    for (diff in result.different) {
+                        message.append("  📂 ${diff.name}:\n")
+                        if (diff.onlyInLocal.isNotEmpty()) {
+                            val existsCount = diff.onlyInLocal.count { checkLocalFileExistsAsync(it) }
+                            val missingCount = diff.onlyInLocal.size - existsCount
+                            message.append("    📱 只在本地有的文件 (${diff.onlyInLocal.size}个): ")
+                            if (missingCount > 0) {
+                                message.append("✅${existsCount}个存在 ❌${missingCount}个已删除\n")
+                            } else {
+                                message.append("✅全部${existsCount}个都存在\n")
+                            }
+                            
+                            // 显示所有文件名，不限制数量
+                            diff.onlyInLocal.forEach { fileName ->
+                                val exists = checkLocalFileExistsAsync(fileName)
+                                val status = if (exists) "✅" else "❌"
+                                message.append("        $status $fileName\n")
+                            }
+                        }
+                        if (diff.onlyInRemote.isNotEmpty()) {
+                            message.append("    ☁️ 只在VPS上有的文件 (${diff.onlyInRemote.size}个):\n")
+                            // 显示所有VPS独有的文件名
+                            diff.onlyInRemote.forEach { fileName ->
+                                message.append("        📥 $fileName\n")
+                            }
+                        }
+                        message.append("\n")
                     }
                 }
-                if (diff.onlyInRemote.isNotEmpty()) {
-                    message.append("    ☁️ Only on VPS (${diff.onlyInRemote.size}):\n")
-                    diff.onlyInRemote.take(10).forEach { fileName ->
-                        message.append("      • $fileName\n")
-                    }
-                    if (diff.onlyInRemote.size > 10) {
-                        message.append("      ... and ${diff.onlyInRemote.size - 10} more\n")
+                
+                // Identical collections
+                if (result.identical.isNotEmpty()) {
+                    message.append("✅ Identical (${result.identical.size}):\n")
+                    result.identical.forEach { name ->
+                        message.append("  • $name\n")
                     }
                 }
-                message.append("\n")
-            }
-        }
-        
-        // Identical collections
-        if (result.identical.isNotEmpty()) {
-            message.append("✅ Identical (${result.identical.size}):\n")
-            result.identical.forEach { name ->
-                message.append("  • $name\n")
-            }
-        }
 
-        if (message.isEmpty()) {
-            message.append("No collections found to compare.")
-        }
+                if (message.isEmpty()) {
+                    message.append("No collections found to compare.")
+                }
 
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Collection Comparison Results")
-            .setMessage(message.toString())
-            .setPositiveButton("OK", null)
-            .setNeutralButton("详细差异") { _, _ ->
-                showDetailedDifferencesDialog(result)
+                withContext(Dispatchers.Main) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@SyncSettingsActivity)
+                        .setTitle("收藏同步比较结果")
+                        .setMessage(message.toString())
+                        .setPositiveButton("确定", null)
+                        .setNeutralButton("查看具体文件") { _, _ ->
+                            showDetailedDifferencesDialog(result)
+                        }
+                        .show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@SyncSettingsActivity)
+                        .setTitle("比较结果")
+                        .setMessage("生成比较结果时出错: ${e.message}")
+                        .setPositiveButton("确定", null)
+                        .show()
+                }
             }
-            .show()
+        }
     }
 
     private fun showDetailedDifferencesDialog(result: ComparisonResult) {
@@ -357,6 +396,45 @@ class SyncSettingsActivity : AppCompatActivity() {
             return
         }
         
+        // 在协程中检查文件存在性，然后显示对话框
+        lifecycleScope.launch {
+            try {
+                // 创建文件列表项，并检查本地文件是否存在
+                val fileList = items.map { fileName ->
+                    val localExists = checkLocalFileExistsAsync(fileName)
+                    val displayName = if (localExists) {
+                        "✅ $fileName"
+                    } else {
+                        "❌ $fileName"
+                    }
+                    
+                    FileListItem(
+                        fileName = displayName,
+                        filePath = "", // 同步比对时我们只有文件名
+                        isVideo = fileName.lowercase().let { 
+                            it.endsWith(".mp4") || it.endsWith(".avi") || it.endsWith(".mov") || 
+                            it.endsWith(".mkv") || it.endsWith(".wmv") || it.endsWith(".flv") 
+                        }
+                    )
+                }
+                
+                // 在主线程显示对话框
+                withContext(Dispatchers.Main) {
+                    showFileListDialogInternal(title, fileList)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@SyncSettingsActivity)
+                        .setTitle("错误")
+                        .setMessage("加载文件列表时出错: ${e.message}")
+                        .setPositiveButton("确定", null)
+                        .show()
+                }
+            }
+        }
+    }
+    
+    private fun showFileListDialogInternal(title: String, fileList: List<FileListItem>) {
         // 使用现有的文件列表对话框布局
         val dialogView = layoutInflater.inflate(R.layout.dialog_file_list, null)
         val recyclerView = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerViewFileList)
@@ -364,24 +442,13 @@ class SyncSettingsActivity : AppCompatActivity() {
         
         titleTextView.text = title
         
-        // 创建文件列表项（假设都是图片，因为我们只有文件名）
-        val fileList = items.map { fileName ->
-            FileListItem(
-                fileName = fileName,
-                filePath = "", // 同步比对时我们只有文件名
-                isVideo = fileName.lowercase().let { 
-                    it.endsWith(".mp4") || it.endsWith(".avi") || it.endsWith(".mov") || 
-                    it.endsWith(".mkv") || it.endsWith(".wmv") || it.endsWith(".flv") 
-                }
-            )
-        }
-        
         // 设置RecyclerView，添加点击事件尝试查找并打开文件
         recyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
         recyclerView.adapter = FileListAdapter(fileList, object : FileListItemClickListener {
             override fun onItemClick(fileItem: FileListItem) {
-                // 尝试在本地查找同名文件并打开
-                findAndOpenLocalFile(fileItem.fileName)
+                // 移除emoji标记，获取原始文件名
+                val originalFileName = fileItem.fileName.replace("✅ ", "").replace("❌ ", "")
+                findAndOpenLocalFile(originalFileName)
             }
             
             override fun onItemLongClick(fileItem: FileListItem) {
@@ -464,20 +531,96 @@ class SyncSettingsActivity : AppCompatActivity() {
         }
     }
     
+    private suspend fun checkLocalFileExistsAsync(fileName: String): Boolean {
+        return try {
+            val database = AppDatabase.getDatabase(this@SyncSettingsActivity)
+            val allCollections = database.collectionDao().getAllCollectionsSync()
+            
+            for (collection in allCollections) {
+                val items = database.collectionDao().getItemsForCollectionSync(collection.id)
+                val matchingItem = items.find { item ->
+                    File(item.mediaPath).name == fileName
+                }
+                if (matchingItem != null) {
+                    // 检查文件是否真的存在
+                    return File(matchingItem.mediaPath).exists()
+                }
+            }
+            false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun checkLocalFileExists(fileName: String): Boolean {
+        return try {
+            // 使用runBlocking在主线程安全地调用suspend函数
+            kotlinx.coroutines.runBlocking {
+                checkLocalFileExistsAsync(fileName)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private suspend fun getLocalCollectionFileCount(collectionName: String): Int {
+        return try {
+            val database = AppDatabase.getDatabase(this@SyncSettingsActivity)
+            val collections = database.collectionDao().getAllCollectionsSync()
+            val collection = collections.find { it.name == collectionName }
+            if (collection != null) {
+                val items = database.collectionDao().getItemsForCollectionSync(collection.id)
+                items.size
+            } else {
+                0
+            }
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    private suspend fun getLocalCollectionFiles(collectionName: String): List<String> {
+        return try {
+            val database = AppDatabase.getDatabase(this@SyncSettingsActivity)
+            val collections = database.collectionDao().getAllCollectionsSync()
+            val collection = collections.find { it.name == collectionName }
+            if (collection != null) {
+                val items = database.collectionDao().getItemsForCollectionSync(collection.id)
+                items.map { File(it.mediaPath).name }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun getRemoteCollectionFiles(collectionName: String, result: ComparisonResult): List<String> {
+        return result.remoteCollectionFiles[collectionName] ?: emptyList()
+    }
+
     private fun showSyncFileInfo(fileName: String) {
-        val isVideo = fileName.lowercase().let { 
+        // 移除显示名称中的emoji标记，获取原始文件名
+        val originalFileName = fileName.replace("✅ ", "").replace("❌ ", "")
+        
+        val isVideo = originalFileName.lowercase().let { 
             it.endsWith(".mp4") || it.endsWith(".avi") || it.endsWith(".mov") || 
             it.endsWith(".mkv") || it.endsWith(".wmv") || it.endsWith(".flv") 
         }
         
+        val localExists = checkLocalFileExists(originalFileName)
         val fileType = if (isVideo) "视频文件" else "图片文件"
+        val existsStatus = if (localExists) "✅ 存在于本地" else "❌ 本地不存在"
+        
         val message = """
-            文件名: $fileName
+            文件名: $originalFileName
             文件类型: $fileType
+            本地状态: $existsStatus
             
             提示：
             • 点击文件名可尝试在本地收藏中查找并打开
-            • 如果文件在本地不存在，可能只存在于VPS上
+            • ✅ 表示文件在本地存在且可访问
+            • ❌ 表示文件在本地不存在或已被删除
         """.trimIndent()
         
         androidx.appcompat.app.AlertDialog.Builder(this)

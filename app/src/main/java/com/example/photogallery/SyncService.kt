@@ -585,7 +585,8 @@ class SyncService(private val context: Context) {
                 onlyLocal = onlyLocal,
                 onlyRemote = onlyRemote,
                 different = different,
-                identical = identical
+                identical = identical,
+                remoteCollectionFiles = remoteCollectionMap
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -781,5 +782,6 @@ data class ComparisonResult(
     val onlyLocal: List<String>,
     val onlyRemote: List<String>, 
     val different: List<CollectionDifference>,
-    val identical: List<String>
+    val identical: List<String>,
+    val remoteCollectionFiles: Map<String, List<String>> = emptyMap() // 添加远程收藏文件映射
 )
