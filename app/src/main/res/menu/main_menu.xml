@@ -18,4 +18,16 @@
         android:title="文件名列表"
         android:icon="@android:drawable/ic_menu_sort_by_size"
         app:showAsAction="never" />
+        
+    <item
+        android:id="@+id/action_cleanup_invalid"
+        android:title="清理无效文件"
+        android:icon="@android:drawable/ic_menu_delete"
+        app:showAsAction="never" />
+        
+    <item
+        android:id="@+id/action_reset_database"
+        android:title="重置所有数据"
+        android:icon="@android:drawable/ic_menu_revert"
+        app:showAsAction="never" />
 </menu>

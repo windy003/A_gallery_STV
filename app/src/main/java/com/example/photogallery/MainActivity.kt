@@ -82,6 +82,9 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerView()
         checkPermissionAndLoadMedia()
+        
+        // 清理无效的文件记录
+        cleanupInvalidFiles()
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -101,6 +104,14 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.action_show_file_list -> {
                 showFileListDialog()
+                true
+            }
+            R.id.action_cleanup_invalid -> {
+                showCleanupConfirmDialog()
+                true
+            }
+            R.id.action_reset_database -> {
+                showResetDatabaseConfirmDialog()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -559,6 +570,11 @@ class MainActivity : AppCompatActivity() {
                 if (file.exists() && file.delete()) {
                     deletedCount++
                     
+                    // 通知媒体扫描器文件已删除
+                    val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                    intent.data = Uri.fromFile(file.parentFile)
+                    sendBroadcast(intent)
+                    
                     // 记录变动日志
                     ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
                         "Main Gallery", filePath
@@ -592,32 +608,64 @@ class MainActivity : AppCompatActivity() {
 
         filePaths.forEach { filePath ->
             try {
+                var fileDeleted = false
                 val uri = getMediaUriFromPath(filePath)
+                
                 if (uri != null) {
+                    // 尝试通过MediaStore删除
                     val deletedRows = contentResolver.delete(uri, null, null)
                     if (deletedRows > 0) {
                         deletedCount++
+                        fileDeleted = true
                         
                         // 记录变动日志
                         ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
                             "Main Gallery", filePath
                         )
-                    } else {
-                        failedCount++
                     }
-                } else {
-                    // 如果无法通过MediaStore删除，尝试直接删除文件
+                }
+                
+                if (!fileDeleted) {
+                    // 如果MediaStore删除失败或找不到URI，直接删除文件
                     val file = File(filePath)
-                    if (file.exists() && file.delete()) {
-                        deletedCount++
+                    android.util.Log.d("MainActivity", "尝试删除文件: $filePath")
+                    android.util.Log.d("MainActivity", "文件存在: ${file.exists()}")
+                    android.util.Log.d("MainActivity", "文件可读: ${file.canRead()}")
+                    android.util.Log.d("MainActivity", "文件可写: ${file.canWrite()}")
+                    android.util.Log.d("MainActivity", "父目录可写: ${file.parentFile?.canWrite()}")
+                    
+                    if (file.exists()) {
+                        // 尝试设置文件权限
+                        try {
+                            file.setWritable(true)
+                            file.setReadable(true)
+                        } catch (e: Exception) {
+                            android.util.Log.e("MainActivity", "设置文件权限失败: $filePath", e)
+                        }
                         
-                        // 记录变动日志
-                        ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
-                            "Main Gallery", filePath
-                        )
+                        if (file.delete()) {
+                            deletedCount++
+                            fileDeleted = true
+                            
+                            // 通知媒体扫描器文件已删除
+                            val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                            intent.data = Uri.fromFile(file.parentFile)
+                            sendBroadcast(intent)
+                            
+                            // 记录变动日志
+                            ChangeLogHelper.getInstance(this).logItemRemovedFromCollection(
+                                "Main Gallery", filePath
+                            )
+                        } else {
+                            android.util.Log.e("MainActivity", "文件删除失败: $filePath")
+                        }
                     } else {
-                        failedCount++
+                        android.util.Log.e("MainActivity", "文件不存在: $filePath")
                     }
+                }
+                
+                if (!fileDeleted) {
+                    failedCount++
                 }
             } catch (e: Exception) {
                 failedCount++
@@ -801,6 +849,129 @@ class MainActivity : AppCompatActivity() {
                 intent.putExtra("image_paths", arrayOf(fileItem.filePath))
                 intent.putExtra("current_index", 0)
                 startActivity(intent)
+            }
+        }
+    }
+
+    private fun cleanupInvalidFiles() {
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@MainActivity)
+                val allItems = db.collectionDao().getAllItemsSync()
+                var cleanedCount = 0
+                
+                for (item in allItems) {
+                    val file = File(item.mediaPath)
+                    if (!file.exists()) {
+                        // 文件不存在，从数据库中删除记录
+                        db.collectionDao().removeItemByPath(item.mediaPath)
+                        cleanedCount++
+                        android.util.Log.d("MainActivity", "清理无效文件记录: ${item.mediaPath}")
+                    }
+                }
+                
+                if (cleanedCount > 0) {
+                    android.util.Log.d("MainActivity", "已清理 $cleanedCount 个无效文件记录")
+                    // 重新加载媒体文件
+                    loadMedia()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "清理无效文件时出错", e)
+            }
+        }
+    }
+
+    private fun showCleanupConfirmDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("清理无效文件")
+            .setMessage("这将清理数据库中指向不存在文件的记录，确定继续吗？")
+            .setPositiveButton("清理") { _, _ ->
+                performManualCleanup()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun performManualCleanup() {
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@MainActivity)
+                val allItems = db.collectionDao().getAllItemsSync()
+                var cleanedCount = 0
+                
+                // 创建一个要删除的路径列表
+                val pathsToDelete = mutableListOf<String>()
+                
+                for (item in allItems) {
+                    val file = File(item.mediaPath)
+                    if (!file.exists()) {
+                        pathsToDelete.add(item.mediaPath)
+                        cleanedCount++
+                    }
+                }
+                
+                // 批量删除
+                for (path in pathsToDelete) {
+                    db.collectionDao().removeItemByPath(path)
+                }
+                
+                Toast.makeText(this@MainActivity, "已清理 $cleanedCount 个无效文件记录", Toast.LENGTH_SHORT).show()
+                
+                if (cleanedCount > 0) {
+                    // 重新加载媒体文件
+                    loadMedia()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "清理时出错: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showResetDatabaseConfirmDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("重置所有数据")
+            .setMessage("⚠️ 警告：这将清空所有收藏列表和相关数据，此操作不可撤销！\n\n确定要继续吗？")
+            .setPositiveButton("重置") { _, _ ->
+                showSecondConfirmDialog()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showSecondConfirmDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("最后确认")
+            .setMessage("请再次确认：\n\n• 所有收藏列表将被删除\n• 所有收藏关联将被清除\n• 同步历史将被清空\n\n这个操作无法撤销！")
+            .setPositiveButton("确认重置") { _, _ ->
+                resetDatabase()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun resetDatabase() {
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@MainActivity)
+                
+                // 清空所有数据表
+                db.collectionDao().deleteAllCollectionItems()
+                db.collectionDao().deleteAllCollections()
+                
+                Toast.makeText(this@MainActivity, "数据库已重置，应用将重启", Toast.LENGTH_LONG).show()
+                
+                // 延迟重启应用
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    val intent = packageManager.getLaunchIntentForPackage(packageName)
+                    intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                    finish()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                }, 2000)
+                
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "重置失败: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }

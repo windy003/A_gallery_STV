@@ -8,4 +8,10 @@
         android:icon="@android:drawable/ic_menu_sort_by_size"
         app:showAsAction="never" />
         
+    <item
+        android:id="@+id/action_refresh_collection"
+        android:title="刷新收藏"
+        android:icon="@android:drawable/ic_menu_rotate"
+        app:showAsAction="never" />
+        
 </menu>

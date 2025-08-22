@@ -9,6 +9,8 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import java.io.File
 
 class PhotoAdapter(
     private val onItemClick: (MediaItem) -> Unit,
@@ -61,10 +63,24 @@ class PhotoAdapter(
         private val selectionOverlay: View = itemView.findViewById(R.id.selectionOverlay) // Assuming this is added to item_photo.xml
 
         fun bind(mediaItem: MediaItem, onItemClick: (MediaItem) -> Unit, onItemLongClick: (MediaItem) -> Unit, isSelected: Boolean, selectionMode: Boolean) {
-            Glide.with(itemView.context)
-                .load(mediaItem.path)
-                .centerCrop()
-                .into(imageView)
+            // 检查文件是否存在
+            val file = File(mediaItem.path)
+            if (file.exists()) {
+                Glide.with(itemView.context)
+                    .load(mediaItem.path)
+                    .centerCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .skipMemoryCache(true)
+                    .into(imageView)
+                
+                // 显示正常的UI元素
+                itemView.visibility = View.VISIBLE
+                itemView.alpha = 1.0f
+            } else {
+                // 文件不存在，隐藏或标记此项
+                itemView.visibility = View.GONE
+                return
+            }
 
             playIcon.visibility = if (mediaItem.isVideo) View.VISIBLE else View.GONE
 

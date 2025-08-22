@@ -45,4 +45,13 @@ interface CollectionDao {
 
     @Query("UPDATE collection_items SET mediaPath = :newPath WHERE mediaPath = :oldPath")
     suspend fun updateItemPath(oldPath: String, newPath: String)
+
+    @Query("DELETE FROM collection_items WHERE mediaPath = :mediaPath")
+    suspend fun removeItemByPath(mediaPath: String)
+
+    @Query("SELECT * FROM collection_items")
+    suspend fun getAllItemsSync(): List<CollectionItem>
+    
+    @Query("DELETE FROM collection_items WHERE collectionId = :collectionId AND mediaPath NOT IN (SELECT mediaPath FROM collection_items WHERE collectionId = :collectionId AND mediaPath LIKE '%' || mediaPath || '%')")
+    suspend fun cleanupInvalidFiles(collectionId: Long)
 }

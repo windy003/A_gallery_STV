@@ -97,6 +97,16 @@ class CollectionDetailActivity : AppCompatActivity() {
                 photoAdapter.submitList(it)
             }
         }
+
+        // 清理当前收藏中的无效文件
+        cleanupInvalidFilesInCollection()
+        
+        // 强制清理并刷新
+        lifecycleScope.launch {
+            // 延迟一下确保清理完成
+            kotlinx.coroutines.delay(500)
+            forceRefreshCollection()
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -108,6 +118,10 @@ class CollectionDetailActivity : AppCompatActivity() {
         return when (item.itemId) {
             R.id.action_show_file_list -> {
                 showFileListDialog()
+                true
+            }
+            R.id.action_refresh_collection -> {
+                forceRefreshCollection()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -546,6 +560,61 @@ class CollectionDetailActivity : AppCompatActivity() {
     override fun onSupportNavigateUp(): Boolean {
         onBackPressed()
         return true
+    }
+
+    private fun cleanupInvalidFilesInCollection() {
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@CollectionDetailActivity)
+                val items = db.collectionDao().getItemsForCollectionSync(collectionId)
+                var cleanedCount = 0
+                
+                for (item in items) {
+                    val file = File(item.mediaPath)
+                    if (!file.exists()) {
+                        // 文件不存在，从收藏中移除
+                        db.collectionDao().removeItemFromCollection(collectionId, item.mediaPath)
+                        cleanedCount++
+                        android.util.Log.d("CollectionDetail", "清理无效文件: ${item.mediaPath}")
+                    }
+                }
+                
+                if (cleanedCount > 0) {
+                    android.util.Log.d("CollectionDetail", "从收藏 '$collectionName' 中清理了 $cleanedCount 个无效文件")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CollectionDetail", "清理收藏中的无效文件时出错", e)
+            }
+        }
+    }
+
+    private fun forceRefreshCollection() {
+        lifecycleScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(this@CollectionDetailActivity)
+                val items = db.collectionDao().getItemsForCollectionSync(collectionId)
+                var cleanedCount = 0
+                
+                for (item in items) {
+                    val file = File(item.mediaPath)
+                    if (!file.exists()) {
+                        // 文件不存在，从收藏中移除
+                        db.collectionDao().removeItemFromCollection(collectionId, item.mediaPath)
+                        cleanedCount++
+                    }
+                }
+                
+                val message = if (cleanedCount > 0) {
+                    "已清理 $cleanedCount 个无效文件"
+                } else {
+                    "收藏已是最新状态"
+                }
+                
+                Toast.makeText(this@CollectionDetailActivity, message, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@CollectionDetailActivity, "刷新失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     companion object {

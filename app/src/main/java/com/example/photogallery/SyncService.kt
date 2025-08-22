@@ -1,6 +1,12 @@
 package com.example.photogallery
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import com.example.photogallery.data.AppDatabase
 import com.example.photogallery.data.Collection
 import com.example.photogallery.data.CollectionItem
@@ -200,8 +206,8 @@ class SyncService(private val context: Context) {
             channel = session.openChannel("sftp") as ChannelSftp
             channel.connect()
 
-            // Create local download directory
-            val downloadDir = File(context.getExternalFilesDir(null), "downloaded_collections")
+            // Create local download directory in Pictures folder
+            val downloadDir = getPublicPicturesDir()
             if (!downloadDir.exists()) {
                 downloadDir.mkdirs()
             }
@@ -310,19 +316,51 @@ class SyncService(private val context: Context) {
                             }
 
                             if (shouldDownload) {
-                                val outputStream = FileOutputStream(localFilePath)
-                                channel.get(remoteFilePath, outputStream)
-                                outputStream.close()
-                                downloadedFiles++
-                            }
-
-                            // Add file to collection in database if not already exists
-                            if (!existingLocalFileNames.contains(fileName)) {
-                                val collectionItem = CollectionItem(
-                                    collectionId = collectionId,
-                                    mediaPath = localFilePath.absolutePath
-                                )
-                                collectionDao.insertItemIntoCollection(collectionItem)
+                                var actualFilePath = localFilePath.absolutePath
+                                
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    // Android 10+ 使用MediaStore API下载文件
+                                    val downloadedPath = downloadFileWithMediaStore(channel, remoteFilePath, fileName, collectionName)
+                                    if (downloadedPath != null) {
+                                        actualFilePath = downloadedPath
+                                        downloadedFiles++
+                                    }
+                                } else {
+                                    // Android 9及以下使用传统方式
+                                    val outputStream = FileOutputStream(localFilePath)
+                                    channel.get(remoteFilePath, outputStream)
+                                    outputStream.close()
+                                    
+                                    // 设置文件权限为可读写
+                                    try {
+                                        localFilePath.setReadable(true, false)
+                                        localFilePath.setWritable(true, false)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+                                    
+                                    // 通知媒体扫描器扫描新文件
+                                    scanMediaFile(localFilePath.absolutePath)
+                                    downloadedFiles++
+                                }
+                                
+                                // Add file to collection in database if not already exists
+                                if (!existingLocalFileNames.contains(fileName)) {
+                                    val collectionItem = CollectionItem(
+                                        collectionId = collectionId,
+                                        mediaPath = actualFilePath
+                                    )
+                                    collectionDao.insertItemIntoCollection(collectionItem)
+                                }
+                            } else {
+                                // 即使没有下载，也要确保数据库中有记录
+                                if (!existingLocalFileNames.contains(fileName)) {
+                                    val collectionItem = CollectionItem(
+                                        collectionId = collectionId,
+                                        mediaPath = localFilePath.absolutePath
+                                    )
+                                    collectionDao.insertItemIntoCollection(collectionItem)
+                                }
                             }
 
                         } catch (e: Exception) {
@@ -342,6 +380,9 @@ class SyncService(private val context: Context) {
                     description = "Mirror synced $totalCollections collections ($downloadedFiles files) from VPS. Local files/folders deleted when removed from VPS."
                 )
             )
+            
+            // 扫描整个下载目录，确保所有文件都被媒体库识别
+            scanDownloadDirectory()
 
             true
         } catch (e: Exception) {
@@ -595,6 +636,128 @@ class SyncService(private val context: Context) {
             }
             // Then delete the empty directory
             channel.rmdir(dirPath)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun downloadFileWithMediaStore(channel: ChannelSftp, remoteFilePath: String, fileName: String, collectionName: String): String? {
+        try {
+            val isImage = fileName.lowercase().run {
+                endsWith(".jpg") || endsWith(".jpeg") || endsWith(".png") || 
+                endsWith(".gif") || endsWith(".bmp") || endsWith(".webp")
+            }
+            
+            val contentUri = if (isImage) {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            } else {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            }
+            
+            val contentValues = android.content.ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/PhotoGallery/$collectionName")
+                if (isImage) {
+                    put(MediaStore.Images.Media.MIME_TYPE, getMimeType(fileName))
+                } else {
+                    put(MediaStore.Video.Media.MIME_TYPE, getMimeType(fileName))
+                }
+            }
+            
+            val uri = context.contentResolver.insert(contentUri, contentValues)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    channel.get(remoteFilePath, outputStream)
+                }
+                
+                // 获取实际的文件路径
+                val projection = arrayOf(MediaStore.MediaColumns.DATA)
+                context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+                        return cursor.getString(dataIndex)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    private fun getMimeType(fileName: String): String {
+        return when (fileName.lowercase().substringAfterLast('.')) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "bmp" -> "image/bmp"
+            "webp" -> "image/webp"
+            "mp4" -> "video/mp4"
+            "avi" -> "video/x-msvideo"
+            "mkv" -> "video/x-matroska"
+            "mov" -> "video/quicktime"
+            "wmv" -> "video/x-ms-wmv"
+            "flv" -> "video/x-flv"
+            "webm" -> "video/webm"
+            "m4v" -> "video/x-m4v"
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun scanDownloadDirectory() {
+        try {
+            val downloadDir = getPublicPicturesDir()
+            if (downloadDir.exists()) {
+                val allFiles = mutableListOf<String>()
+                downloadDir.walkTopDown().forEach { file ->
+                    if (file.isFile && isImageOrVideo(file.name)) {
+                        allFiles.add(file.absolutePath)
+                    }
+                }
+                
+                if (allFiles.isNotEmpty()) {
+                    // 批量扫描所有文件
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        allFiles.toTypedArray(),
+                        null
+                    ) { path, uri ->
+                        // 扫描完成回调
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun getPublicPicturesDir(): File {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ 使用标准的Pictures目录
+            File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "PhotoGallery")
+        } else {
+            // Android 9及以下版本
+            File(Environment.getExternalStorageDirectory(), "Pictures/PhotoGallery")
+        }
+    }
+
+    private fun scanMediaFile(filePath: String) {
+        try {
+            // 通知媒体扫描器扫描新文件，让系统相册能够识别
+            val intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+            intent.data = Uri.fromFile(File(filePath))
+            context.sendBroadcast(intent)
+            
+            // 额外使用MediaScannerConnection来确保文件被扫描
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.media.MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(filePath),
+                    null
+                ) { path, uri ->
+                    // 扫描完成回调
+                }
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
