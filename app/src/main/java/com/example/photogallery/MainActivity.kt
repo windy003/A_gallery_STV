@@ -41,7 +41,7 @@ data class MediaItem(val path: String, val isVideo: Boolean, val dateAdded: Long
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var recyclerView: ZoomableRecyclerView
+    private lateinit var recyclerView: SimpleZoomableRecyclerView
     private lateinit var photoAdapter: PhotoAdapter
     private var actionMode: ActionMode? = null
 

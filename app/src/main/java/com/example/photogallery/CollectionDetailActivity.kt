@@ -89,8 +89,8 @@ class CollectionDetailActivity : AppCompatActivity() {
             }
         )
 
-        binding.recyclerView.adapter = photoAdapter
-        binding.recyclerView.layoutManager = GridLayoutManager(this, 3)
+        // 设置SimpleZoomableRecyclerView的适配器和布局管理器
+        binding.recyclerView.setPhotoAdapter(photoAdapter)
 
         lifecycleScope.launch {
             viewModel.mediaItems.collectLatest {
