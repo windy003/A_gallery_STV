@@ -252,18 +252,25 @@ class SyncService(private val context: Context) {
                 }
             }
 
+            android.util.Log.d("SyncService", "开始下载，远程收藏数: ${remoteDirs.size}")
+            
             for (remoteDir in remoteDirs) {
                 totalCollections++
                 val collectionName = remoteDir.filename
                 val remoteDirPath = "${config.remotePath}/$collectionName"
                 
+                android.util.Log.d("SyncService", "处理收藏: $collectionName")
+                
                 // Get or create collection in database
                 val existingCollection = existingLocalCollectionMap[collectionName]
                 val collectionId = if (existingCollection != null) {
+                    android.util.Log.d("SyncService", "使用现有收藏: $collectionName, ID: ${existingCollection.id}")
                     existingCollection.id
                 } else {
                     val collection = Collection(id = 0, name = collectionName)
-                    collectionDao.insertCollection(collection)
+                    val newId = collectionDao.insertCollection(collection)
+                    android.util.Log.d("SyncService", "创建新收藏: $collectionName, ID: $newId")
+                    newId
                 }
                 
                 // Create local directory for this collection
@@ -282,6 +289,8 @@ class SyncService(private val context: Context) {
                         !it.attrs.isDir && isImageOrVideo(it.filename)
                     }
                     val remoteFileNames = remoteFiles.map { it.filename }.toSet()
+                    
+                    android.util.Log.d("SyncService", "收藏 $collectionName 中有 ${remoteFiles.size} 个文件")
 
                     // Delete local files that don't exist on VPS (mirror sync)
                     for (localItem in existingLocalItems) {
@@ -301,6 +310,7 @@ class SyncService(private val context: Context) {
                         }
                     }
 
+                    var collectionDownloadedFiles = 0
                     for (remoteFile in remoteFiles) {
                         try {
                             val fileName = remoteFile.filename
@@ -312,11 +322,18 @@ class SyncService(private val context: Context) {
                             if (localFilePath.exists()) {
                                 if (localFilePath.length() == remoteFile.attrs.size) {
                                     shouldDownload = false
+                                    android.util.Log.d("SyncService", "文件已存在，跳过: $fileName")
+                                } else {
+                                    android.util.Log.d("SyncService", "文件大小不匹配，重新下载: $fileName")
                                 }
+                            } else {
+                                android.util.Log.d("SyncService", "准备下载新文件: $fileName")
                             }
 
                             if (shouldDownload) {
+                                android.util.Log.d("SyncService", "开始下载文件: $fileName")
                                 var actualFilePath = localFilePath.absolutePath
+                                var downloadSuccess = false
                                 
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                     // Android 10+ 使用MediaStore API下载文件
@@ -324,50 +341,99 @@ class SyncService(private val context: Context) {
                                     if (downloadedPath != null) {
                                         actualFilePath = downloadedPath
                                         downloadedFiles++
+                                        collectionDownloadedFiles++
+                                        downloadSuccess = true
+                                        android.util.Log.d("SyncService", "MediaStore下载成功: $fileName -> $downloadedPath")
+                                    } else {
+                                        // MediaStore失败，回退到传统方式
+                                        android.util.Log.w("SyncService", "MediaStore下载失败，回退到传统方式: $fileName")
+                                        try {
+                                            val outputStream = FileOutputStream(localFilePath)
+                                            channel.get(remoteFilePath, outputStream)
+                                            outputStream.close()
+                                            
+                                            // 设置文件权限为可读写
+                                            try {
+                                                localFilePath.setReadable(true, false)
+                                                localFilePath.setWritable(true, false)
+                                            } catch (e: Exception) {
+                                                e.printStackTrace()
+                                            }
+                                            
+                                            // 通知媒体扫描器扫描新文件
+                                            scanMediaFile(localFilePath.absolutePath)
+                                            downloadedFiles++
+                                            collectionDownloadedFiles++
+                                            downloadSuccess = true
+                                            android.util.Log.d("SyncService", "回退传统方式下载成功: $fileName")
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("SyncService", "回退传统方式下载也失败: $fileName", e)
+                                        }
                                     }
                                 } else {
                                     // Android 9及以下使用传统方式
-                                    val outputStream = FileOutputStream(localFilePath)
-                                    channel.get(remoteFilePath, outputStream)
-                                    outputStream.close()
-                                    
-                                    // 设置文件权限为可读写
                                     try {
-                                        localFilePath.setReadable(true, false)
-                                        localFilePath.setWritable(true, false)
+                                        val outputStream = FileOutputStream(localFilePath)
+                                        channel.get(remoteFilePath, outputStream)
+                                        outputStream.close()
+                                        
+                                        // 设置文件权限为可读写
+                                        try {
+                                            localFilePath.setReadable(true, false)
+                                            localFilePath.setWritable(true, false)
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                        
+                                        // 通知媒体扫描器扫描新文件
+                                        scanMediaFile(localFilePath.absolutePath)
+                                        downloadedFiles++
+                                        collectionDownloadedFiles++
+                                        downloadSuccess = true
+                                        android.util.Log.d("SyncService", "传统方式下载成功: $fileName")
                                     } catch (e: Exception) {
-                                        e.printStackTrace()
+                                        android.util.Log.e("SyncService", "传统方式下载失败: $fileName", e)
                                     }
-                                    
-                                    // 通知媒体扫描器扫描新文件
-                                    scanMediaFile(localFilePath.absolutePath)
-                                    downloadedFiles++
                                 }
                                 
-                                // Add file to collection in database if not already exists
-                                if (!existingLocalFileNames.contains(fileName)) {
-                                    val collectionItem = CollectionItem(
-                                        collectionId = collectionId,
-                                        mediaPath = actualFilePath
-                                    )
-                                    collectionDao.insertItemIntoCollection(collectionItem)
+                                // Add file to collection in database if download was successful
+                                if (downloadSuccess && !existingLocalFileNames.contains(fileName)) {
+                                    try {
+                                        val collectionItem = CollectionItem(
+                                            collectionId = collectionId,
+                                            mediaPath = actualFilePath
+                                        )
+                                        collectionDao.insertItemIntoCollection(collectionItem)
+                                        android.util.Log.d("SyncService", "数据库记录添加成功: $fileName")
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("SyncService", "数据库记录添加失败: $fileName", e)
+                                    }
                                 }
                             } else {
-                                // 即使没有下载，也要确保数据库中有记录
-                                if (!existingLocalFileNames.contains(fileName)) {
-                                    val collectionItem = CollectionItem(
-                                        collectionId = collectionId,
-                                        mediaPath = localFilePath.absolutePath
-                                    )
-                                    collectionDao.insertItemIntoCollection(collectionItem)
+                                // 即使没有下载，也要确保数据库中有记录（如果文件存在）
+                                if (!existingLocalFileNames.contains(fileName) && localFilePath.exists()) {
+                                    try {
+                                        val collectionItem = CollectionItem(
+                                            collectionId = collectionId,
+                                            mediaPath = localFilePath.absolutePath
+                                        )
+                                        collectionDao.insertItemIntoCollection(collectionItem)
+                                        android.util.Log.d("SyncService", "跳过下载但添加数据库记录: $fileName")
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("SyncService", "跳过下载时数据库记录添加失败: $fileName", e)
+                                    }
                                 }
                             }
 
                         } catch (e: Exception) {
+                            android.util.Log.e("SyncService", "处理文件时出错: ${remoteFile.filename}", e)
                             e.printStackTrace()
                         }
                     }
+                    
+                    android.util.Log.d("SyncService", "收藏 $collectionName 完成，下载了 $collectionDownloadedFiles 个文件")
                 } catch (e: Exception) {
+                    android.util.Log.e("SyncService", "处理收藏 $collectionName 时出错", e)
                     e.printStackTrace()
                 }
             }
@@ -644,6 +710,8 @@ class SyncService(private val context: Context) {
 
     private fun downloadFileWithMediaStore(channel: ChannelSftp, remoteFilePath: String, fileName: String, collectionName: String): String? {
         try {
+            android.util.Log.d("SyncService", "MediaStore下载开始: $fileName")
+            
             val isImage = fileName.lowercase().run {
                 endsWith(".jpg") || endsWith(".jpeg") || endsWith(".png") || 
                 endsWith(".gif") || endsWith(".bmp") || endsWith(".webp")
@@ -655,6 +723,10 @@ class SyncService(private val context: Context) {
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             }
             
+            // 首先检查文件是否已存在，如果存在则删除
+            val expectedPath = "/storage/emulated/0/Pictures/PhotoGallery/$collectionName/$fileName"
+            deleteExistingMediaStoreEntry(expectedPath, contentUri)
+            
             val contentValues = android.content.ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/PhotoGallery/$collectionName")
@@ -665,10 +737,28 @@ class SyncService(private val context: Context) {
                 }
             }
             
+            android.util.Log.d("SyncService", "创建MediaStore条目: $fileName")
             val uri = context.contentResolver.insert(contentUri, contentValues)
             if (uri != null) {
+                android.util.Log.d("SyncService", "MediaStore URI创建成功: $uri")
+                
+                var downloadBytes = 0L
                 context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    channel.get(remoteFilePath, outputStream)
+                    android.util.Log.d("SyncService", "开始传输文件: $remoteFilePath")
+                    
+                    // 使用缓冲区读取和写入
+                    val inputStream = channel.get(remoteFilePath)
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        downloadBytes += bytesRead
+                    }
+                    inputStream.close()
+                    outputStream.flush()
+                    
+                    android.util.Log.d("SyncService", "文件传输完成: $fileName, 大小: $downloadBytes 字节")
                 }
                 
                 // 获取实际的文件路径
@@ -676,14 +766,38 @@ class SyncService(private val context: Context) {
                 context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
                     if (cursor.moveToFirst()) {
                         val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
-                        return cursor.getString(dataIndex)
+                        val filePath = cursor.getString(dataIndex)
+                        android.util.Log.d("SyncService", "MediaStore文件路径: $filePath")
+                        return filePath
                     }
                 }
+            } else {
+                android.util.Log.e("SyncService", "MediaStore URI创建失败: $fileName")
             }
         } catch (e: Exception) {
+            android.util.Log.e("SyncService", "MediaStore下载异常: $fileName", e)
             e.printStackTrace()
         }
         return null
+    }
+
+    private fun deleteExistingMediaStoreEntry(filePath: String, contentUri: android.net.Uri) {
+        try {
+            val projection = arrayOf(MediaStore.MediaColumns._ID)
+            val selection = "${MediaStore.MediaColumns.DATA} = ?"
+            val selectionArgs = arrayOf(filePath)
+            
+            context.contentResolver.query(contentUri, projection, selection, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                    val deleteUri = android.content.ContentUris.withAppendedId(contentUri, id)
+                    val deletedRows = context.contentResolver.delete(deleteUri, null, null)
+                    android.util.Log.d("SyncService", "删除现有MediaStore条目: $filePath, 删除行数: $deletedRows")
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SyncService", "删除现有MediaStore条目失败: $filePath", e)
+        }
     }
 
     private fun getMimeType(fileName: String): String {
