@@ -1,6 +1,6 @@
 1<?xml version="1.0" encoding="utf-8"?>
 2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-3    package="com.example.photogallery"
+3    package="v2_com.example.photogallery"
 4    android:versionCode="1"
 5    android:versionName="1.0" >
 6
@@ -9,69 +9,69 @@
 9        android:targetSdkVersion="34" />
 10
 11    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-11-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:5:5-80
-11-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:5:22-77
+11-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:5:5-80
+11-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:5:22-77
 12    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-12-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:6:5-76
-12-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:6:22-73
+12-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:6:5-76
+12-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:6:22-73
 13
 14    <permission
 14-->[androidx.core:core:1.12.0] C:\Users\92892\.gradle\caches\transforms-3\a02af45ee381eb3587200483e4a20c77\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
-15        android:name="com.example.photogallery.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+15        android:name="v2_com.example.photogallery.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 15-->[androidx.core:core:1.12.0] C:\Users\92892\.gradle\caches\transforms-3\a02af45ee381eb3587200483e4a20c77\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
 16        android:protectionLevel="signature" />
 16-->[androidx.core:core:1.12.0] C:\Users\92892\.gradle\caches\transforms-3\a02af45ee381eb3587200483e4a20c77\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
 17
-18    <uses-permission android:name="com.example.photogallery.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+18    <uses-permission android:name="v2_com.example.photogallery.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
 18-->[androidx.core:core:1.12.0] C:\Users\92892\.gradle\caches\transforms-3\a02af45ee381eb3587200483e4a20c77\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
 18-->[androidx.core:core:1.12.0] C:\Users\92892\.gradle\caches\transforms-3\a02af45ee381eb3587200483e4a20c77\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
 19
 20    <application
-20-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:8:5-32:19
+20-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:8:5-32:19
 21        android:allowBackup="true"
-21-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:9:9-35
+21-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:9:9-35
 22        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
 22-->[androidx.core:core:1.12.0] C:\Users\92892\.gradle\caches\transforms-3\a02af45ee381eb3587200483e4a20c77\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
 23        android:dataExtractionRules="@xml/data_extraction_rules"
-23-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:10:9-65
+23-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:10:9-65
 24        android:debuggable="true"
 25        android:extractNativeLibs="false"
 26        android:fullBackupContent="@xml/backup_rules"
-26-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:11:9-54
+26-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:11:9-54
 27        android:icon="@drawable/ic_launcher"
-27-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:12:9-45
+27-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:12:9-45
 28        android:label="@string/app_name"
-28-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:13:9-41
+28-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:13:9-41
 29        android:roundIcon="@drawable/ic_launcher"
-29-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:14:9-50
+29-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:14:9-50
 30        android:supportsRtl="true"
-30-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:15:9-35
+30-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:15:9-35
 31        android:testOnly="true"
 32        android:theme="@style/Theme.PhotoGallery" >
-32-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:16:9-50
+32-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:16:9-50
 33        <activity
-33-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:19:9-22:68
+33-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:19:9-22:68
 34            android:name="com.example.photogallery.ImageDetailActivity"
-34-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:20:13-48
+34-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:20:13-48
 35            android:exported="false"
-35-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:21:13-37
+35-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:21:13-37
 36            android:theme="@style/Theme.PhotoGallery.FullScreen" />
-36-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:22:13-65
+36-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:22:13-65
 37        <activity
-37-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:24:9-31:20
+37-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:24:9-31:20
 38            android:name="com.example.photogallery.MainActivity"
-38-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:25:13-41
+38-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:25:13-41
 39            android:exported="true" >
-39-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:26:13-36
+39-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:26:13-36
 40            <intent-filter>
-40-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:27:13-30:29
+40-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:27:13-30:29
 41                <action android:name="android.intent.action.MAIN" />
-41-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:28:17-69
-41-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:28:25-66
+41-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:28:17-69
+41-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:28:25-66
 42
 43                <category android:name="android.intent.category.LAUNCHER" />
-43-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:29:17-77
-43-->D:\files\projects\tmp\app\src\main\AndroidManifest.xml:29:27-74
+43-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:29:17-77
+43-->D:\files\projects\A_gallery_STV\app\src\main\AndroidManifest.xml:29:27-74
 44            </intent-filter>
 45        </activity>
 46
@@ -79,7 +79,7 @@
 47-->[androidx.emoji2:emoji2:1.2.0] C:\Users\92892\.gradle\caches\transforms-3\a65dd08b83d5118d050f511d4f15902d\transformed\emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
 48            android:name="androidx.startup.InitializationProvider"
 48-->[androidx.emoji2:emoji2:1.2.0] C:\Users\92892\.gradle\caches\transforms-3\a65dd08b83d5118d050f511d4f15902d\transformed\emoji2-1.2.0\AndroidManifest.xml:25:13-67
-49            android:authorities="com.example.photogallery.androidx-startup"
+49            android:authorities="v2_com.example.photogallery.androidx-startup"
 49-->[androidx.emoji2:emoji2:1.2.0] C:\Users\92892\.gradle\caches\transforms-3\a65dd08b83d5118d050f511d4f15902d\transformed\emoji2-1.2.0\AndroidManifest.xml:26:13-68
 50            android:exported="false" >
 50-->[androidx.emoji2:emoji2:1.2.0] C:\Users\92892\.gradle\caches\transforms-3\a65dd08b83d5118d050f511d4f15902d\transformed\emoji2-1.2.0\AndroidManifest.xml:27:13-37

@@ -31,10 +31,10 @@ com.example.photogallery.app-savedstate-1.2.1-29 C:\Users\92892\.gradle\caches\t
 com.example.photogallery.app-emoji2-views-helper-1.2.0-30 C:\Users\92892\.gradle\caches\transforms-3\e4651e135791e7b173462990da7e357d\transformed\emoji2-views-helper-1.2.0\res
 com.example.photogallery.app-savedstate-ktx-1.2.1-31 C:\Users\92892\.gradle\caches\transforms-3\ea80ff42f16816dd646181de6708ed34\transformed\savedstate-ktx-1.2.1\res
 com.example.photogallery.app-lifecycle-viewmodel-2.6.1-32 C:\Users\92892\.gradle\caches\transforms-3\f1bbd3b57b4092aea08b37f6a517a552\transformed\lifecycle-viewmodel-2.6.1\res
-com.example.photogallery.app-pngs-33 D:\files\projects\tmp\app\build\generated\res\pngs\debug
-com.example.photogallery.app-resValues-34 D:\files\projects\tmp\app\build\generated\res\resValues\debug
-com.example.photogallery.app-packageDebugResources-35 D:\files\projects\tmp\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.example.photogallery.app-packageDebugResources-36 D:\files\projects\tmp\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.example.photogallery.app-merged_res-37 D:\files\projects\tmp\app\build\intermediates\merged_res\debug
-com.example.photogallery.app-debug-38 D:\files\projects\tmp\app\src\debug\res
-com.example.photogallery.app-main-39 D:\files\projects\tmp\app\src\main\res
+com.example.photogallery.app-pngs-33 D:\files\projects\A_gallery_STV\app\build\generated\res\pngs\debug
+com.example.photogallery.app-resValues-34 D:\files\projects\A_gallery_STV\app\build\generated\res\resValues\debug
+com.example.photogallery.app-packageDebugResources-35 D:\files\projects\A_gallery_STV\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.example.photogallery.app-packageDebugResources-36 D:\files\projects\A_gallery_STV\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.example.photogallery.app-merged_res-37 D:\files\projects\A_gallery_STV\app\build\intermediates\merged_res\debug
+com.example.photogallery.app-debug-38 D:\files\projects\A_gallery_STV\app\src\debug\res
+com.example.photogallery.app-main-39 D:\files\projects\A_gallery_STV\app\src\main\res

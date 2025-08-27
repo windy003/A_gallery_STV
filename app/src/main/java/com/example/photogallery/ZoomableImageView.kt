@@ -33,6 +33,11 @@ class ZoomableImageView @JvmOverloads constructor(
     private var oldMeasuredHeight = 0
 
     private lateinit var scaleDetector: ScaleGestureDetector
+    
+    // 性能优化：复用数组避免频繁内存分配
+    private val matrixValues = FloatArray(9)
+    private var lastUpdateTime = 0L
+    private val updateThreshold = 16L // 约60fps
 
     companion object {
         const val NONE = 0
@@ -46,6 +51,9 @@ class ZoomableImageView @JvmOverloads constructor(
         matrix.setTranslate(1f, 1f)
         imageMatrix = matrix
         scaleType = ScaleType.MATRIX
+        
+        // 启用硬件加速以提升性能
+        setLayerType(LAYER_TYPE_HARDWARE, null)
 
         setOnTouchListener { _, event ->
             scaleDetector.onTouchEvent(event)
@@ -67,12 +75,18 @@ class ZoomableImageView @JvmOverloads constructor(
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (mode == DRAG) {
-                        matrix.set(savedMatrix)
-                        val dx = curr.x - start.x
-                        val dy = curr.y - start.y
-                        matrix.postTranslate(dx, dy)
-                        fixTranslation()
-                        imageMatrix = matrix
+                        val currentTime = System.currentTimeMillis()
+                        
+                        // 限制拖拽更新频率
+                        if (currentTime - lastUpdateTime >= updateThreshold) {
+                            matrix.set(savedMatrix)
+                            val dx = curr.x - start.x
+                            val dy = curr.y - start.y
+                            matrix.postTranslate(dx, dy)
+                            fixTranslationOptimized()
+                            imageMatrix = matrix
+                            lastUpdateTime = currentTime
+                        }
                     }
                 }
             }
@@ -93,6 +107,14 @@ class ZoomableImageView @JvmOverloads constructor(
         }
 
         override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val currentTime = System.currentTimeMillis()
+            
+            // 限制更新频率，避免过度重绘
+            if (currentTime - lastUpdateTime < updateThreshold) {
+                return true
+            }
+            lastUpdateTime = currentTime
+            
             var scaleFactor = detector.scaleFactor
             val origScale = saveScale
             saveScale *= scaleFactor
@@ -111,7 +133,8 @@ class ZoomableImageView @JvmOverloads constructor(
                 matrix.postScale(scaleFactor, scaleFactor, detector.focusX, detector.focusY)
             }
 
-            fixTranslation()
+            fixTranslationOptimized()
+            imageMatrix = matrix
             return true
         }
     }
@@ -121,6 +144,20 @@ class ZoomableImageView @JvmOverloads constructor(
         matrix.getValues(values)
         val transX = values[Matrix.MTRANS_X]
         val transY = values[Matrix.MTRANS_Y]
+
+        val fixTransX = getFixTranslation(transX, viewWidth.toFloat(), originalWidth * saveScale)
+        val fixTransY = getFixTranslation(transY, viewHeight.toFloat(), originalHeight * saveScale)
+
+        if (fixTransX != 0f || fixTransY != 0f) {
+            matrix.postTranslate(fixTransX, fixTransY)
+        }
+    }
+    
+    // 优化版本：复用数组，减少内存分配
+    private fun fixTranslationOptimized() {
+        matrix.getValues(matrixValues)
+        val transX = matrixValues[Matrix.MTRANS_X]
+        val transY = matrixValues[Matrix.MTRANS_Y]
 
         val fixTransX = getFixTranslation(transX, viewWidth.toFloat(), originalWidth * saveScale)
         val fixTransY = getFixTranslation(transY, viewHeight.toFloat(), originalHeight * saveScale)
@@ -189,6 +226,6 @@ class ZoomableImageView @JvmOverloads constructor(
             originalHeight = viewHeight - 2 * redundantYSpace
             imageMatrix = matrix
         }
-        fixTranslation()
+        fixTranslationOptimized()
     }
 }
